@@ -2,11 +2,9 @@ name: Kubernetes Operator CI
 
 on:
   push:
-    paths:
-      - 'operator/**'
+    branches: [ main ]
   pull_request:
-    paths:
-      - 'operator/**'
+    branches: [ main ]
 
 jobs:
   build-and-test-operator:

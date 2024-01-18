@@ -18,8 +18,8 @@ jobs:
 
     - name: Build Docker Image
       run: make docker-build
-      working-directory: operator
+      working-directory: ./
 
     - name: Run Tests
       run: make test
-      working-directory: operator
+      working-directory: ./

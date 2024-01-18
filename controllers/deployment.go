@@ -17,7 +17,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	oneclickiov1alpha1 "github.com/janlauber/one-click/api/v1alpha1"
+	oneclickiov1alpha1 "github.com/janlauber/one-click-operator/api/v1alpha1"
 )
 
 func (r *RolloutReconciler) reconcileDeployment(ctx context.Context, rollout *oneclickiov1alpha1.Rollout) error {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	oneclickiov1alpha1 "github.com/janlauber/one-click/api/v1alpha1"
+	oneclickiov1alpha1 "github.com/janlauber/one-click-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"

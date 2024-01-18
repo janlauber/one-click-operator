@@ -3,7 +3,7 @@ package controllers
 import (
 	"context"
 
-	oneclickiov1alpha1 "github.com/janlauber/one-click/api/v1alpha1"
+	oneclickiov1alpha1 "github.com/janlauber/one-click-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

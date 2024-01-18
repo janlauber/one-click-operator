@@ -30,7 +30,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	oneclickiov1alpha1 "github.com/janlauber/one-click/api/v1alpha1"
+	oneclickiov1alpha1 "github.com/janlauber/one-click-operator/api/v1alpha1"
 	//+kubebuilder:scaffold:imports
 )
 

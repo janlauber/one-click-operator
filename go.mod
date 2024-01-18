@@ -1,4 +1,4 @@
-module github.com/janlauber/one-click
+module github.com/janlauber/one-click-operator
 
 go 1.19
 

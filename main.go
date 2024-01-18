@@ -31,8 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	oneclickiov1alpha1 "github.com/janlauber/one-click/api/v1alpha1"
-	"github.com/janlauber/one-click/controllers"
+	oneclickiov1alpha1 "github.com/janlauber/one-click-operator/api/v1alpha1"
+	"github.com/janlauber/one-click-operator/controllers"
 	//+kubebuilder:scaffold:imports
 )
 

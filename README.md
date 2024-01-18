@@ -8,7 +8,7 @@ However, this Kubernetes operator simplifies the entire process by serving as an
 
 The primary advantage of using this operator lies in its simplification and automation of the deployment process. It allows users, particularly those who may not be deeply versed in Kubernetes intricacies, to deploy single-container applications with ease and reliability. This streamlined process not only saves time and reduces the potential for human error but also ensures a consistent deployment experience.
 
-Furthermore, the [pocketbase-backend](https://github.com/janlauber/one-click/pocketbase/) of the project will leverage this operator to deploy applications to Kubernetes. This integration signifies a shift towards a more efficient, less error-prone deployment methodology, emphasizing automation and ease of use. In essence, this Kubernetes operator is a transformative tool, designed to make Kubernetes more accessible and manageable, particularly for deployments involving single-container applications.
+Furthermore, the [pocketbase-backend](https://github.com/janlauber/one-click/tree/main/pocketbase) of the project will leverage this operator to deploy applications to Kubernetes. This integration signifies a shift towards a more efficient, less error-prone deployment methodology, emphasizing automation and ease of use. In essence, this Kubernetes operator is a transformative tool, designed to make Kubernetes more accessible and manageable, particularly for deployments involving single-container applications.
 
 ## Build
 

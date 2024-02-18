@@ -10,6 +10,80 @@ The primary advantage of using this operator lies in its simplification and auto
 
 Furthermore, the [pocketbase-backend](https://github.com/janlauber/one-click/tree/main/pocketbase) of the project will leverage this operator to deploy applications to Kubernetes. This integration signifies a shift towards a more efficient, less error-prone deployment methodology, emphasizing automation and ease of use. In essence, this Kubernetes operator is a transformative tool, designed to make Kubernetes more accessible and manageable, particularly for deployments involving single-container applications.
 
+## Rollout CRD
+
+```yaml
+apiVersion: one-click.dev/v1alpha1
+kind: Rollout
+metadata:
+  name: nginx
+  namespace: test
+spec:
+  image:
+    registry: "docker.io"
+    repository: "nginx"
+    tag: "latest"
+    username: "test"
+    password: "test3"
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+      add:
+        - NET_BIND_SERVICE
+  horizontalScale:
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 80
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  env:
+    - name: "REFLEX_USERNAME"
+      value: "admin"
+    - name: DEBUG
+      value: "true"
+  secrets:
+    - name: "REFLEX_PASSWORD"
+      value: "admin"
+    - name: "ANOTHER_SECRET"
+      value: "122"
+  volumes:
+    - name: "data"
+      mountPath: "/data"
+      size: "2Gi"
+      storageClass: "standard"
+  interfaces:
+    - name: "http"
+      port: 80
+    - name: "https"
+      port: 443
+      ingress:
+        ingressClass: "nginx"
+        annotations:
+          nginx.ingress.kubernetes.io/rewrite-target: /
+          nginx.ingress.kubernetes.io/ssl-redirect: "false"
+        rules:
+          - host: "reflex.oneclickapps.dev"
+            path: "/test"
+            tls: false
+          - host: "reflex.oneclickapps.dev"
+            path: "/test"
+            tls: false
+  serviceAccountName: "nginx"
+```
+
 ## Build
 
 ```bash

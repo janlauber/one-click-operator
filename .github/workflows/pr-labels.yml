@@ -3,6 +3,8 @@ on: pull_request
 jobs:
   size-label:
     runs-on: ubuntu-latest
+    # Do not run on dependabot PRs
+    if: github.actor != 'dependabot[bot]'
     steps:
       - name: size-label
         uses: "pascalgn/size-label-action@v0.5.0"

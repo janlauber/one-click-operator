@@ -122,6 +122,7 @@ func (r *RolloutReconciler) secretForRollout(f *oneclickiov1alpha1.Rollout) (*co
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      f.Name + "-secrets", // Naming the secret based on the Rollout name
 			Namespace: f.Namespace,
+			Labels:    map[string]string{"rollout.one-click.dev/name": f.Name},
 		},
 		StringData: secretData,
 	}

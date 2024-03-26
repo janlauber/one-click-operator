@@ -127,7 +127,8 @@ func (r *RolloutReconciler) reconcileIngress(ctx context.Context, f *oneclickiov
 }
 
 func (r *RolloutReconciler) ingressForRollout(f *oneclickiov1alpha1.Rollout, intf oneclickiov1alpha1.InterfaceSpec) *networkingv1.Ingress {
-	labels := map[string]string{"rollout.one-click.dev/name": f.Name}
+	// the name of the namespace is the project name
+	labels := map[string]string{"rollout.one-click.dev/name": f.Name, "project.one-click.dev/name": f.Namespace}
 	ingress := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        intf.Name + "-ingress", // Create a unique name for the Ingress
@@ -183,9 +184,18 @@ func (r *RolloutReconciler) ingressForRollout(f *oneclickiov1alpha1.Rollout, int
 
 		// Add TLS configuration if TLS is enabled for this ingress path
 		if rule.TLS {
-			tls := networkingv1.IngressTLS{
-				Hosts:      []string{rule.Host},
-				SecretName: intf.Name + "-tls-secret", // Name of the TLS secret
+			var tls networkingv1.IngressTLS
+
+			// Add the TLS secret name if defined
+			if rule.TlsSecretName == "" {
+				tls = networkingv1.IngressTLS{
+					Hosts:      []string{rule.Host},
+					SecretName: intf.Name + "-tls-secret", // Name of the TLS secret
+				}
+			} else {
+				tls = networkingv1.IngressTLS{
+					SecretName: rule.TlsSecretName,
+				}
 			}
 			ingress.Spec.TLS = append(ingress.Spec.TLS, tls)
 		}
@@ -235,11 +245,19 @@ func getIngressTLS(intf oneclickiov1alpha1.InterfaceSpec) []networkingv1.Ingress
 
 	// Loop over each rule defined in the ingress path
 	for _, rule := range intf.Ingress.Rules {
-		// Add TLS configuration if TLS is enabled for this ingress path
 		if rule.TLS {
-			tls := networkingv1.IngressTLS{
-				Hosts:      []string{rule.Host},
-				SecretName: intf.Name + "-tls-secret", // Name of the TLS secret
+			var tls networkingv1.IngressTLS
+
+			// Add the TLS secret name if defined
+			if rule.TlsSecretName == "" {
+				tls = networkingv1.IngressTLS{
+					Hosts:      []string{rule.Host},
+					SecretName: intf.Name + "-tls-secret", // Name of the TLS secret
+				}
+			} else {
+				tls = networkingv1.IngressTLS{
+					SecretName: rule.TlsSecretName,
+				}
 			}
 			tlsConfigs = append(tlsConfigs, tls)
 		}

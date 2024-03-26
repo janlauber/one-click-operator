@@ -115,6 +115,8 @@ spec:
                                 type: string
                               tls:
                                 type: boolean
+                              tlsSecretName:
+                                type: string
                             required:
                             - host
                             - path

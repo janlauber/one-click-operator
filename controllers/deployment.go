@@ -51,7 +51,8 @@ func (r *RolloutReconciler) reconcileDeployment(ctx context.Context, rollout *on
 
 func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclickiov1alpha1.Rollout) *appsv1.Deployment {
 	log := log.FromContext(context.Background())
-	labels := map[string]string{"rollout.one-click.dev/name": f.Name}
+	// the name of the namespace is the project name
+	labels := map[string]string{"rollout.one-click.dev/name": f.Name, "project.one-click.dev/name": f.Namespace}
 	replicas := int32(f.Spec.HorizontalScale.MinReplicas)
 
 	dep := &appsv1.Deployment{

@@ -94,6 +94,7 @@ func (r *RolloutReconciler) serviceForRollout(f *oneclickiov1alpha1.Rollout, int
 	}
 	selectorLabels := map[string]string{
 		"rollout.one-click.dev/name": f.Name,
+		"project.one-click.dev/name": f.Namespace,
 	}
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

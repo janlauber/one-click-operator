@@ -93,9 +93,10 @@ type IngressSpec struct {
 }
 
 type IngressRule struct {
-	Host string `json:"host"`
-	Path string `json:"path"`
-	TLS  bool   `json:"tls"`
+	Host          string `json:"host"`
+	Path          string `json:"path"`
+	TLS           bool   `json:"tls"`
+	TlsSecretName string `json:"tlsSecretName,omitempty"`
 }
 
 // RolloutSpec defines the desired state of Rollout

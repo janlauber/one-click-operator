@@ -7,6 +7,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -15,7 +16,15 @@ import (
 )
 
 func (r *RolloutReconciler) updateStatus(ctx context.Context, f *oneclickiov1alpha1.Rollout) error {
+
 	log := log.FromContext(ctx)
+
+	// Refetch the latest state of the Rollout object to ensure it's up to date
+	latestF := &oneclickiov1alpha1.Rollout{}
+	if err := r.Get(ctx, types.NamespacedName{Name: f.Name, Namespace: f.Namespace}, latestF); err != nil {
+		log.Error(err, "Failed to get the latest Rollout object for status update", "Rollout.Namespace", f.Namespace, "Rollout.Name", f.Name)
+		return err
+	}
 
 	// get the deployment replica count
 	replicas, err := r.getDeploymentReplicas(ctx, f)
@@ -214,9 +223,16 @@ func (r *RolloutReconciler) updateStatus(ctx context.Context, f *oneclickiov1alp
 	// Update the Rollout status
 	f.Status.Volumes = volumeStatuses
 
-	// Update the Rollout status
-	if err := r.Status().Update(ctx, f); err != nil {
-		log.Error(err, "Failed to update Rollout status")
+	// Attempt to update the Rollout status
+	err = r.Status().Update(ctx, f)
+	if err != nil {
+		if errors.IsConflict(err) {
+			// Log conflict errors at a lower severity level and without a stack trace
+			log.Info("Conflict occurred during Rollout status update, will retry. This is expected and handled automatically.", "Rollout.Namespace", f.Namespace, "Rollout.Name", f.Name)
+		} else {
+			// For all other errors, log them normally including the stack trace
+			log.Error(err, "Failed to update Rollout status", "Rollout.Namespace", f.Namespace, "Rollout.Name", f.Name)
+		}
 		return err
 	}
 

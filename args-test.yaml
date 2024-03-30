@@ -1,0 +1,29 @@
+apiVersion: one-click.dev/v1alpha1
+kind: Rollout
+metadata:
+  name: busybox
+spec:
+  args:
+    - "sleep"
+    - "3700"
+  command: ["sh", "-c"]
+  image:
+    registry: "docker.io"
+    repository: "busybox"
+    tag: "latest"
+  horizontalScale:
+    minReplicas: 1
+    maxReplicas: 1
+    targetCPUUtilizationPercentage: 80
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  env: []
+  secrets: []
+  volumes: []
+  interfaces: []
+  serviceAccountName: "nginx"

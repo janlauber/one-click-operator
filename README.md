@@ -19,6 +19,8 @@ metadata:
   name: nginx
   namespace: test
 spec:
+  args: ["nginx", "-g", "daemon off;"]
+  command: ["nginx"]
   image:
     registry: "docker.io"
     repository: "nginx"
@@ -76,8 +78,9 @@ spec:
           nginx.ingress.kubernetes.io/ssl-redirect: "false"
         rules:
           - host: "reflex.oneclickapps.dev"
-            path: "/test"
-            tls: false
+            path: "/"
+            tls: true
+            tlsSecretName: "wildcard-tls-secret"
           - host: "reflex.oneclickapps.dev"
             path: "/test"
             tls: false

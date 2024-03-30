@@ -50,6 +50,14 @@ spec:
           spec:
             description: RolloutSpec defines the desired state of Rollout
             properties:
+              args:
+                items:
+                  type: string
+                type: array
+              command:
+                items:
+                  type: string
+                type: array
               env:
                 items:
                   properties:

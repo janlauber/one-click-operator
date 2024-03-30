@@ -92,6 +92,16 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 		},
 	}
 
+	// if args are defined, add them to the container
+	if len(f.Spec.Args) > 0 {
+		dep.Spec.Template.Spec.Containers[0].Args = f.Spec.Args
+	}
+
+	// if command is defined, add it to the container
+	if len(f.Spec.Command) > 0 {
+		dep.Spec.Template.Spec.Containers[0].Command = f.Spec.Command
+	}
+
 	// if security context is defined, add it to the pod security context
 	if !reflect.DeepEqual(f.Spec.SecurityContext, oneclickiov1alpha1.SecurityContextSpec{}) {
 		dep.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{

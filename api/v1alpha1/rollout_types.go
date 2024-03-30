@@ -101,6 +101,8 @@ type IngressRule struct {
 
 // RolloutSpec defines the desired state of Rollout
 type RolloutSpec struct {
+	Args               []string             `json:"args,omitempty"`
+	Command            []string             `json:"command,omitempty"`
 	Image              ImageSpec            `json:"image"`
 	SecurityContext    SecurityContextSpec  `json:"securityContext,omitempty"`
 	HorizontalScale    HorizontalScaleSpec  `json:"horizontalScale"`

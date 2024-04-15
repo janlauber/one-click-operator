@@ -22,31 +22,43 @@ import (
 
 func (r *RolloutReconciler) reconcileDeployment(ctx context.Context, f *oneclickiov1alpha1.Rollout) error {
 	log := log.FromContext(ctx)
+	deploymentName := f.Name
+	namespace := f.Namespace
 
-	desiredDeployment := r.deploymentForRollout(ctx, f)
-
-	currentDeployment := &appsv1.Deployment{}
-	err := r.Get(ctx, types.NamespacedName{Name: f.Name, Namespace: f.Namespace}, currentDeployment)
-	if err != nil && errors.IsNotFound(err) {
-		r.Recorder.Eventf(f, corev1.EventTypeNormal, "Creating", "Creating Deployment %s", f.Name)
-		return r.Create(ctx, desiredDeployment)
-	} else if err != nil {
-		log.Error(err, "Failed to get Deployment")
-		return err
-	}
-
-	// Compare the current Deployment with the Rollout spec
-	if needsUpdate(currentDeployment, f) {
-		// Update the Deployment to align it with the Rollout spec
-		currentDeployment.Spec = desiredDeployment.Spec
-		err = r.Update(ctx, currentDeployment)
+	result := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		currentDeployment := &appsv1.Deployment{}
+		err := r.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: namespace}, currentDeployment)
 		if err != nil {
-			r.Recorder.Eventf(f, corev1.EventTypeWarning, "UpdateFailed", "Failed to update Deployment %s", f.Name)
+			if errors.IsNotFound(err) {
+				// Deployment not found, create a new one
+				desiredDeployment := r.deploymentForRollout(ctx, f)
+				r.Recorder.Eventf(f, corev1.EventTypeNormal, "Creating", "Creating Deployment %s", deploymentName)
+				return r.Create(ctx, desiredDeployment)
+			}
+			// Other error while fetching the Deployment
 			return err
 		}
+
+		// Deployment found, check if it needs updating
+		desiredDeployment := r.deploymentForRollout(ctx, f)
+		if needsUpdate(currentDeployment, f) {
+			// Update the Deployment to align it with the Rollout spec
+			currentDeployment.Spec = desiredDeployment.Spec
+			updateErr := r.Update(ctx, currentDeployment)
+			if updateErr != nil {
+				r.Recorder.Eventf(f, corev1.EventTypeWarning, "UpdateFailed", "Failed to update Deployment %s", deploymentName)
+				return updateErr
+			}
+			r.Recorder.Eventf(f, corev1.EventTypeNormal, "Updated", "Updated Deployment %s", deploymentName)
+		}
+		return nil
+	})
+
+	if result != nil {
+		log.Error(result, "Failed to reconcile Deployment", "Deployment.Namespace", namespace, "Deployment.Name", deploymentName)
 	}
 
-	return nil
+	return result
 }
 
 func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclickiov1alpha1.Rollout) *appsv1.Deployment {

@@ -189,15 +189,15 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 		var volumeMounts []corev1.VolumeMount
 		for _, v := range f.Spec.Volumes {
 			volumes = append(volumes, corev1.Volume{
-				Name: f.Name + "-" + v.Name,
+				Name: v.Name + "-" + f.Name,
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: f.Name + "-" + v.Name,
+						ClaimName: v.Name + "-" + f.Name,
 					},
 				},
 			})
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      f.Name + "-" + v.Name,
+				Name:      v.Name + "-" + f.Name,
 				MountPath: v.MountPath,
 			})
 		}
@@ -320,18 +320,18 @@ func volumesMatch(currentVolumes []corev1.Volume, desiredVolumes []oneclickiov1a
 
 	desiredVolumeMap := make(map[string]oneclickiov1alpha1.VolumeSpec)
 	for _, v := range desiredVolumes {
-		desiredVolumeMap[f.Name+"-"+v.Name] = v
+		desiredVolumeMap[v.Name+"-"+f.Name] = v
 	}
 
 	for _, currentVolume := range currentVolumes {
-		volSpec, exists := desiredVolumeMap[f.Name+"-"+currentVolume.Name]
+		volSpec, exists := desiredVolumeMap[currentVolume.Name+"-"+f.Name]
 		if !exists {
 			// Volume is present in Deployment but not in Rollout spec
 			return false
 		}
 
 		// Check PVC name
-		if currentVolume.VolumeSource.PersistentVolumeClaim.ClaimName != f.Name+"-"+volSpec.Name {
+		if currentVolume.VolumeSource.PersistentVolumeClaim.ClaimName != volSpec.Name+"-"+f.Name {
 			return false
 		}
 		// Additional checks can be added here, such as PVC size, storage class, etc.

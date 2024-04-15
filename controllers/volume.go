@@ -23,7 +23,7 @@ func (r *RolloutReconciler) reconcilePVCs(ctx context.Context, f *oneclickiov1al
 
 	expectedPVCs := make(map[string]struct{})
 	for _, volSpec := range f.Spec.Volumes {
-		pvcName := f.Name + "-" + volSpec.Name
+		pvcName := volSpec.Name + "-" + f.Name
 		expectedPVCs[pvcName] = struct{}{}
 
 		desiredPVC := r.constructPVCForRollout(f, volSpec)
@@ -95,7 +95,7 @@ func (r *RolloutReconciler) constructPVCForRollout(f *oneclickiov1alpha1.Rollout
 
 	return &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      f.Name + "-" + volSpec.Name,
+			Name:      volSpec.Name + "-" + f.Name,
 			Namespace: f.Namespace,
 			Labels:    labels,
 			OwnerReferences: []metav1.OwnerReference{

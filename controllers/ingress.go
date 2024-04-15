@@ -23,7 +23,7 @@ func (r *RolloutReconciler) reconcileIngress(ctx context.Context, f *oneclickiov
 	for _, intf := range f.Spec.Interfaces {
 		// Process each interface
 		if intf.Ingress.IngressClass != "" || len(intf.Ingress.Rules) > 0 {
-			expectedIngresses[f.Name+"-"+intf.Name+"-ingress"] = true
+			expectedIngresses[intf.Name+"-"+f.Name+"-ingress"] = true
 			ingress := r.ingressForRollout(f, intf)
 
 			foundIngress := &networkingv1.Ingress{}
@@ -78,10 +78,10 @@ func (r *RolloutReconciler) reconcileIngress(ctx context.Context, f *oneclickiov
 			}
 		} else {
 			// No Ingress configuration for this interface, delete the Ingress if it exists
-			if _, exists := expectedIngresses[f.Name+"-"+intf.Name+"-ingress"]; exists {
+			if _, exists := expectedIngresses[intf.Name+"-"+f.Name+"-ingress"]; exists {
 				ingress := &networkingv1.Ingress{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      f.Name + "-" + intf.Name + "-ingress",
+						Name:      intf.Name + "-" + f.Name + "-ingress",
 						Namespace: f.Namespace,
 					},
 				}
@@ -129,7 +129,7 @@ func (r *RolloutReconciler) ingressForRollout(f *oneclickiov1alpha1.Rollout, int
 	}
 	ingress := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        f.Name + "-" + intf.Name + "-ingress", // Create a unique name for the Ingress
+			Name:        intf.Name + "-" + f.Name + "-ingress", // Create a unique name for the Ingress
 			Namespace:   f.Namespace,
 			Labels:      labels,
 			Annotations: make(map[string]string),
@@ -167,7 +167,7 @@ func (r *RolloutReconciler) ingressForRollout(f *oneclickiov1alpha1.Rollout, int
 							}(),
 							Backend: networkingv1.IngressBackend{
 								Service: &networkingv1.IngressServiceBackend{
-									Name: f.Name + "-" + intf.Name + "-svc",
+									Name: intf.Name + "-" + f.Name + "-svc",
 									Port: networkingv1.ServiceBackendPort{
 										Number: intf.Port,
 									},
@@ -188,7 +188,7 @@ func (r *RolloutReconciler) ingressForRollout(f *oneclickiov1alpha1.Rollout, int
 			if rule.TlsSecretName == "" {
 				tls = networkingv1.IngressTLS{
 					Hosts:      []string{rule.Host},
-					SecretName: f.Name + "-" + intf.Name + "-tls-secret", // Name of the TLS secret
+					SecretName: intf.Name + "-" + f.Name + "-tls-secret", // Name of the TLS secret
 				}
 			} else {
 				tls = networkingv1.IngressTLS{
@@ -221,7 +221,7 @@ func getIngressRules(f *oneclickiov1alpha1.Rollout, intf oneclickiov1alpha1.Inte
 							}(),
 							Backend: networkingv1.IngressBackend{
 								Service: &networkingv1.IngressServiceBackend{
-									Name: f.Name + "-" + intf.Name + "-svc",
+									Name: intf.Name + "-" + f.Name + "-svc",
 									Port: networkingv1.ServiceBackendPort{
 										Number: intf.Port,
 									},
@@ -250,7 +250,7 @@ func getIngressTLS(f *oneclickiov1alpha1.Rollout, intf oneclickiov1alpha1.Interf
 			if rule.TlsSecretName == "" {
 				tls = networkingv1.IngressTLS{
 					Hosts:      []string{rule.Host},
-					SecretName: f.Name + "-" + intf.Name + "-tls-secret", // Name of the TLS secret
+					SecretName: intf.Name + "-" + f.Name + "-tls-secret", // Name of the TLS secret
 				}
 			} else {
 				tls = networkingv1.IngressTLS{

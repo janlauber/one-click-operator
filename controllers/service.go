@@ -20,7 +20,7 @@ func (r *RolloutReconciler) reconcileService(ctx context.Context, f *oneclickiov
 
 	expectedServices := make(map[string]bool)
 	for _, intf := range f.Spec.Interfaces {
-		serviceName := f.Name + "-" + intf.Name + "-svc"
+		serviceName := intf.Name + "-" + f.Name + "-svc"
 		expectedServices[serviceName] = true
 
 		service := r.serviceForRollout(f, intf)
@@ -72,7 +72,7 @@ func (r *RolloutReconciler) serviceForRollout(f *oneclickiov1alpha1.Rollout, int
 	}
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      f.Name + "-" + intf.Name + "-svc",
+			Name:      intf.Name + "-" + f.Name + "-svc",
 			Namespace: f.Namespace,
 			Labels:    labels,
 		},

@@ -38,15 +38,14 @@ func (r *RolloutReconciler) reconcileServiceAccount(ctx context.Context, rollout
 	foundSa := &corev1.ServiceAccount{}
 	err := r.Get(ctx, types.NamespacedName{Name: saName, Namespace: rollout.Namespace}, foundSa)
 	if err != nil && errors.IsNotFound(err) {
-		// ServiceAccount doesn't exist - create it
-		log.Info("Creating a new ServiceAccount", "Namespace", rollout.Namespace, "Name", saName)
 		err = r.Create(ctx, expectedSa)
 		if err != nil {
-			log.Error(err, "Failed to create new ServiceAccount", "ServiceAccount.Namespace", rollout.Namespace, "ServiceAccount.Name", saName)
+			r.Recorder.Eventf(rollout, corev1.EventTypeWarning, "CreationFailed", "Failed to create ServiceAccount %s", saName)
 			return err
 		}
+		r.Recorder.Eventf(rollout, corev1.EventTypeNormal, "Created", "Created ServiceAccount %s", saName)
 	} else if err != nil {
-		log.Error(err, "Failed to get ServiceAccount", "ServiceAccount.Namespace", rollout.Namespace, "ServiceAccount.Name", saName)
+		r.Recorder.Eventf(rollout, corev1.EventTypeWarning, "GetFailed", "Failed to get ServiceAccount %s", saName)
 		return err
 	}
 	// ServiceAccount already exists - no action required

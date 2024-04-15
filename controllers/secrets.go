@@ -12,15 +12,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func (r *RolloutReconciler) reconcileSecret(ctx context.Context, f *oneclickiov1alpha1.Rollout) error {
 	// Get the desired state of the Secret from the helper function
 	desiredSecret, err := r.secretForRollout(f)
 	if err != nil {
-		log.Log.Error(err, "Failed to construct Secret", "Namespace", f.Namespace, "Name", f.Name)
-		r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to construct Secret %s", f.Name)
+		r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to construct Secret %s", f.Name+"-secrets")
 		return err
 	}
 
@@ -31,14 +29,12 @@ func (r *RolloutReconciler) reconcileSecret(ctx context.Context, f *oneclickiov1
 		// Create the Secret
 		err = r.Create(ctx, desiredSecret)
 		if err != nil {
-			r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to create Secret %s", f.Name)
-			log.Log.Error(err, "Failed to create Secret", "Namespace", desiredSecret.Namespace, "Name", desiredSecret.Name)
+			r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to create Secret %s", f.Name+"-secrets")
 			return err
 		}
 		r.Recorder.Eventf(f, corev1.EventTypeNormal, "Created", "Created Secret %s", f.Name)
 	} else if err != nil {
 		r.Recorder.Eventf(f, corev1.EventTypeWarning, "GetFailed", "Failed to get Secret %s", f.Name)
-		log.Log.Error(err, "Failed to get Secret", "Namespace", desiredSecret.Namespace, "Name", desiredSecret.Name)
 		return err
 	} else {
 		// Secret exists - check if it needs an update
@@ -46,11 +42,9 @@ func (r *RolloutReconciler) reconcileSecret(ctx context.Context, f *oneclickiov1
 			updateSecret(foundSecret, f)
 			err = r.Update(ctx, foundSecret)
 			if err != nil {
-				r.Recorder.Eventf(f, corev1.EventTypeWarning, "UpdateFailed", "Failed to update Secret %s", foundSecret.Name)
-				log.Log.Error(err, "Failed to update Secret", "Namespace", foundSecret.Namespace, "Name", foundSecret.Name)
+				r.Recorder.Eventf(f, corev1.EventTypeWarning, "UpdateFailed", "Failed to update Secret %s", foundSecret.Name+"-secrets")
 				return err
 			}
-			r.Recorder.Eventf(f, corev1.EventTypeNormal, "Updated", "Updated Secret %s", foundSecret.Name)
 		}
 	}
 
@@ -122,7 +116,10 @@ func (r *RolloutReconciler) secretForRollout(f *oneclickiov1alpha1.Rollout) (*co
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      f.Name + "-secrets", // Naming the secret based on the Rollout name
 			Namespace: f.Namespace,
-			Labels:    map[string]string{"rollout.one-click.dev/name": f.Name, "project.one-click.dev/name": f.Namespace},
+			Labels: map[string]string{
+				"one-click.dev/projectId":    f.Namespace,
+				"one-click.dev/deploymentId": f.Name,
+			},
 		},
 		StringData: secretData,
 	}

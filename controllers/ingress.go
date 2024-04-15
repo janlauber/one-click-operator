@@ -23,47 +23,25 @@ func (r *RolloutReconciler) reconcileIngress(ctx context.Context, f *oneclickiov
 	for _, intf := range f.Spec.Interfaces {
 		// Process each interface
 		if intf.Ingress.IngressClass != "" || len(intf.Ingress.Rules) > 0 {
-			expectedIngresses[intf.Name+"-ingress"] = true
+			expectedIngresses[f.Name+"-"+intf.Name+"-ingress"] = true
 			ingress := r.ingressForRollout(f, intf)
 
 			foundIngress := &networkingv1.Ingress{}
 			err := r.Get(ctx, types.NamespacedName{Name: ingress.Name, Namespace: f.Namespace}, foundIngress)
 			if err != nil && errors.IsNotFound(err) {
-				// If the Ingress is not found, create a new one
-				log.Info("Creating a new Ingress", "Namespace", ingress.Namespace, "Name", ingress.Name)
 				err = r.Create(ctx, ingress)
 				if err != nil {
 					// Handle creation error
-					log.Error(err, "Failed to create Ingress", "Namespace", ingress.Namespace, "Name", ingress.Name)
-					r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to create Ingress %s", f.Name)
+					r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to create Ingress %s", ingress.Name)
 					return err
 				}
-				r.Recorder.Eventf(f, "Created", "Created Ingress %s", f.Name)
+				r.Recorder.Eventf(f, corev1.EventTypeNormal, "Created", "Created Ingress %s", ingress.Name)
 			} else if err != nil {
 				// Handle other errors
-				log.Error(err, "Failed to get Ingress", "Namespace", ingress.Namespace, "Name", ingress.Name)
-				r.Recorder.Eventf(f, corev1.EventTypeWarning, "GetFailed", "Failed to get Ingress %s", f.Name)
+				r.Recorder.Eventf(f, corev1.EventTypeWarning, "GetFailed", "Failed to get Ingress %s", ingress.Name)
 				return err
 			} else {
 				// If the Ingress exists, check if it needs to be updated
-				desiredRules := getIngressRules(intf)
-				desiredTLS := getIngressTLS(intf)
-				if !reflect.DeepEqual(foundIngress.Spec.Rules, desiredRules) || !reflect.DeepEqual(foundIngress.Spec.TLS, desiredTLS) {
-					foundIngress.Spec.Rules = desiredRules
-					foundIngress.Spec.TLS = desiredTLS
-					err = r.Update(ctx, foundIngress)
-					if err != nil {
-						// Handle update error
-						log.Error(err, "Failed to update Ingress", "Namespace", foundIngress.Namespace, "Name", foundIngress.Name)
-						r.Recorder.Eventf(f, corev1.EventTypeWarning, "UpdateFailed", "Failed to update Ingress %s", foundIngress.Name)
-						return err
-					}
-					r.Recorder.Eventf(f, corev1.EventTypeNormal, "Updated", "Updated Ingress %s", foundIngress.Name)
-				}
-			}
-
-			if err == nil {
-				// Compare the desired state with the current state
 				updateNeeded := false
 
 				if intf.Ingress.IngressClass != "" {
@@ -74,8 +52,8 @@ func (r *RolloutReconciler) reconcileIngress(ctx context.Context, f *oneclickiov
 				}
 
 				// Check for rules and TLS changes
-				desiredRules := getIngressRules(intf)
-				desiredTLS := getIngressTLS(intf)
+				desiredRules := getIngressRules(f, intf)
+				desiredTLS := getIngressTLS(f, intf)
 				if !reflect.DeepEqual(foundIngress.Spec.Rules, desiredRules) || !reflect.DeepEqual(foundIngress.Spec.TLS, desiredTLS) {
 					foundIngress.Spec.Rules = desiredRules
 					foundIngress.Spec.TLS = desiredTLS
@@ -92,13 +70,28 @@ func (r *RolloutReconciler) reconcileIngress(ctx context.Context, f *oneclickiov
 				if updateNeeded {
 					err = r.Update(ctx, foundIngress)
 					if err != nil {
-						// Handle update error
-						log.Error(err, "Failed to update Ingress", "Namespace", foundIngress.Namespace, "Name", foundIngress.Name)
+						r.Recorder.Eventf(f, corev1.EventTypeWarning, "UpdateFailed", "Failed to update Ingress %s", foundIngress.Name)
 						return err
 					}
+					r.Recorder.Eventf(f, corev1.EventTypeNormal, "Updated", "Updated Ingress %s", foundIngress.Name)
 				}
 			}
-
+		} else {
+			// No Ingress configuration for this interface, delete the Ingress if it exists
+			if _, exists := expectedIngresses[f.Name+"-"+intf.Name+"-ingress"]; exists {
+				ingress := &networkingv1.Ingress{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      f.Name + "-" + intf.Name + "-ingress",
+						Namespace: f.Namespace,
+					},
+				}
+				err := r.Delete(ctx, ingress)
+				if err != nil {
+					r.Recorder.Eventf(f, corev1.EventTypeWarning, "DeletionFailed", "Failed to delete Ingress %s", ingress.Name)
+					return err
+				}
+				r.Recorder.Eventf(f, corev1.EventTypeNormal, "Deleted", "Deleted Ingress %s", ingress.Name)
+			}
 		}
 	}
 
@@ -107,19 +100,21 @@ func (r *RolloutReconciler) reconcileIngress(ctx context.Context, f *oneclickiov
 	listOpts := []client.ListOption{client.InNamespace(f.Namespace)}
 	err := r.List(ctx, ingressList, listOpts...)
 	if err != nil {
-		log.Error(err, "Failed to list ingresses", "Namespace", f.Namespace)
+		log.Error(err, "Failed to list Ingresses", "Rollout.Namespace", f.Namespace)
 		return err
 	}
 
 	for _, ingress := range ingressList.Items {
 		if _, exists := expectedIngresses[ingress.Name]; !exists {
 			// Ingress is no longer needed, delete it
-			err = r.Delete(ctx, &ingress)
-			if err != nil {
-				log.Error(err, "Failed to delete ingress", "Namespace", ingress.Namespace, "Name", ingress.Name)
-				return err
+			if ingress.Labels["one-click.dev/projectId"] == f.Namespace && ingress.Labels["one-click.dev/deploymentId"] == f.Name {
+				err = r.Delete(ctx, &ingress)
+				if err != nil {
+					r.Recorder.Eventf(f, corev1.EventTypeWarning, "DeletionFailed", "Failed to delete Ingress %s", ingress.Name)
+					return err
+				}
+				r.Recorder.Eventf(f, corev1.EventTypeNormal, "Deleted", "Deleted Ingress %s", ingress.Name)
 			}
-			log.Info("Deleted ingress", "Namespace", ingress.Namespace, "Name", ingress.Name)
 		}
 	}
 
@@ -128,10 +123,13 @@ func (r *RolloutReconciler) reconcileIngress(ctx context.Context, f *oneclickiov
 
 func (r *RolloutReconciler) ingressForRollout(f *oneclickiov1alpha1.Rollout, intf oneclickiov1alpha1.InterfaceSpec) *networkingv1.Ingress {
 	// the name of the namespace is the project name
-	labels := map[string]string{"rollout.one-click.dev/name": f.Name, "project.one-click.dev/name": f.Namespace}
+	labels := map[string]string{
+		"one-click.dev/projectId":    f.Namespace,
+		"one-click.dev/deploymentId": f.Name,
+	}
 	ingress := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        intf.Name + "-ingress", // Create a unique name for the Ingress
+			Name:        f.Name + "-" + intf.Name + "-ingress", // Create a unique name for the Ingress
 			Namespace:   f.Namespace,
 			Labels:      labels,
 			Annotations: make(map[string]string),
@@ -169,7 +167,7 @@ func (r *RolloutReconciler) ingressForRollout(f *oneclickiov1alpha1.Rollout, int
 							}(),
 							Backend: networkingv1.IngressBackend{
 								Service: &networkingv1.IngressServiceBackend{
-									Name: intf.Name + "-svc",
+									Name: f.Name + "-" + intf.Name + "-svc",
 									Port: networkingv1.ServiceBackendPort{
 										Number: intf.Port,
 									},
@@ -190,7 +188,7 @@ func (r *RolloutReconciler) ingressForRollout(f *oneclickiov1alpha1.Rollout, int
 			if rule.TlsSecretName == "" {
 				tls = networkingv1.IngressTLS{
 					Hosts:      []string{rule.Host},
-					SecretName: intf.Name + "-tls-secret", // Name of the TLS secret
+					SecretName: f.Name + "-" + intf.Name + "-tls-secret", // Name of the TLS secret
 				}
 			} else {
 				tls = networkingv1.IngressTLS{
@@ -206,7 +204,7 @@ func (r *RolloutReconciler) ingressForRollout(f *oneclickiov1alpha1.Rollout, int
 	return ingress
 }
 
-func getIngressRules(intf oneclickiov1alpha1.InterfaceSpec) []networkingv1.IngressRule {
+func getIngressRules(f *oneclickiov1alpha1.Rollout, intf oneclickiov1alpha1.InterfaceSpec) []networkingv1.IngressRule {
 	var rules []networkingv1.IngressRule
 
 	for _, rule := range intf.Ingress.Rules {
@@ -223,7 +221,7 @@ func getIngressRules(intf oneclickiov1alpha1.InterfaceSpec) []networkingv1.Ingre
 							}(),
 							Backend: networkingv1.IngressBackend{
 								Service: &networkingv1.IngressServiceBackend{
-									Name: intf.Name + "-svc",
+									Name: f.Name + "-" + intf.Name + "-svc",
 									Port: networkingv1.ServiceBackendPort{
 										Number: intf.Port,
 									},
@@ -240,7 +238,7 @@ func getIngressRules(intf oneclickiov1alpha1.InterfaceSpec) []networkingv1.Ingre
 	return rules
 }
 
-func getIngressTLS(intf oneclickiov1alpha1.InterfaceSpec) []networkingv1.IngressTLS {
+func getIngressTLS(f *oneclickiov1alpha1.Rollout, intf oneclickiov1alpha1.InterfaceSpec) []networkingv1.IngressTLS {
 	var tlsConfigs []networkingv1.IngressTLS
 
 	// Loop over each rule defined in the ingress path
@@ -252,7 +250,7 @@ func getIngressTLS(intf oneclickiov1alpha1.InterfaceSpec) []networkingv1.Ingress
 			if rule.TlsSecretName == "" {
 				tls = networkingv1.IngressTLS{
 					Hosts:      []string{rule.Host},
-					SecretName: intf.Name + "-tls-secret", // Name of the TLS secret
+					SecretName: f.Name + "-" + intf.Name + "-tls-secret", // Name of the TLS secret
 				}
 			} else {
 				tls = networkingv1.IngressTLS{

@@ -16,38 +16,33 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func (r *RolloutReconciler) reconcilePVCs(ctx context.Context, rollout *oneclickiov1alpha1.Rollout) error {
+func (r *RolloutReconciler) reconcilePVCs(ctx context.Context, f *oneclickiov1alpha1.Rollout) error {
 	log := log.FromContext(ctx)
 
-	log.Info("Reconciling PVCs", "Rollout", rollout.Name, "Namespace", rollout.Namespace, "Volume Count", len(rollout.Spec.Volumes))
-
 	// Check if the Rollout spec's volume list is empty
-	if len(rollout.Spec.Volumes) == 0 {
-		log.Info("No volumes defined in Rollout, deleting all associated PVCs")
+	if len(f.Spec.Volumes) == 0 {
 		// If no volumes are defined, delete all PVCs associated with this Rollout
-		return r.deleteAllPVCsForRollout(ctx, rollout)
+		return r.deleteAllPVCsForRollout(ctx, f)
 	}
 
 	// Keep track of the PVCs that should exist according to the Rollout specification
 	expectedPVCs := make(map[string]struct{})
-	for _, volSpec := range rollout.Spec.Volumes {
-		expectedPVCs[volSpec.Name] = struct{}{}
-		desiredPvc := r.constructPVCForRollout(rollout, volSpec)
+	for _, volSpec := range f.Spec.Volumes {
+		// expectedPVCs[volSpec.Name] = struct{}{}
+		expectedPVCs[f.Name+"-"+volSpec.Name] = struct{}{}
+		desiredPvc := r.constructPVCForRollout(f, volSpec)
 
 		foundPvc := &corev1.PersistentVolumeClaim{}
-		err := r.Get(ctx, types.NamespacedName{Name: desiredPvc.Name, Namespace: rollout.Namespace}, foundPvc)
+		err := r.Get(ctx, types.NamespacedName{Name: desiredPvc.Name, Namespace: f.Namespace}, foundPvc)
 		if err != nil && errors.IsNotFound(err) {
-			log.Info("Creating a new PVC", "PVC.Namespace", rollout.Namespace, "PVC.Name", desiredPvc.Name)
 			err = r.Create(ctx, desiredPvc)
 			if err != nil {
-				r.Recorder.Eventf(rollout, corev1.EventTypeWarning, "CreationFailed", "Failed to create PVC %s", desiredPvc.Name)
-				log.Error(err, "Failed to create new PVC", "PVC.Namespace", rollout.Namespace, "PVC.Name", desiredPvc.Name)
+				r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to create PVC %s", desiredPvc.Name)
 				return err
 			}
-			r.Recorder.Eventf(rollout, corev1.EventTypeNormal, "Created", "Created PVC %s", desiredPvc.Name)
+			r.Recorder.Eventf(f, corev1.EventTypeNormal, "Created", "Created PVC %s", desiredPvc.Name)
 		} else if err != nil {
-			r.Recorder.Eventf(rollout, corev1.EventTypeWarning, "GetFailed", "Failed to get PVC %s", desiredPvc.Name)
-			log.Error(err, "Failed to get PVC")
+			r.Recorder.Eventf(f, corev1.EventTypeWarning, "GetFailed", "Failed to get PVC %s", desiredPvc.Name)
 			return err
 		} else {
 			// Existing PVC found, check for changes
@@ -87,26 +82,26 @@ func (r *RolloutReconciler) reconcilePVCs(ctx context.Context, rollout *oneclick
 					log.Error(err, "Failed to update PVC size", "PVC.Namespace", foundPvc.Namespace, "PVC.Name", foundPvc.Name)
 					return err
 				}
-				log.Info("Updated PVC size", "PVC.Namespace", foundPvc.Namespace, "PVC.Name", foundPvc.Name)
+				r.Recorder.Eventf(f, corev1.EventTypeNormal, "Updated", "Updated PVC %s", foundPvc.Name)
 			}
 		}
 	}
 
 	// List all PVCs in the namespace
 	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := r.List(ctx, pvcList, client.InNamespace(rollout.Namespace)); err != nil {
-		log.Error(err, "Failed to list PVCs", "Rollout.Namespace", rollout.Namespace)
+	if err := r.List(ctx, pvcList, client.InNamespace(f.Namespace)); err != nil {
+		log.Error(err, "Failed to list PVCs", "Rollout.Namespace", f.Namespace)
 		return err
 	}
 
 	for _, pvc := range pvcList.Items {
-		if _, exists := expectedPVCs[pvc.Name]; !exists && isOwnedByRollout(&pvc, rollout) {
+		if _, exists := expectedPVCs[pvc.Name]; !exists && isOwnedByRollout(&pvc, f) {
 			// Delete the PVC if it's not in the expected list and is owned by the Rollout
-			log.Info("Deleting PVC", "PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
 			if err := r.Delete(ctx, &pvc); err != nil {
-				log.Error(err, "Failed to delete PVC", "PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
+				r.Recorder.Eventf(f, corev1.EventTypeWarning, "DeletionFailed", "Failed to delete PVC %s", pvc.Name)
 				return err
 			}
+			r.Recorder.Eventf(f, corev1.EventTypeNormal, "Deleted", "Deleted PVC %s", pvc.Name)
 		}
 	}
 
@@ -117,16 +112,16 @@ func allowsVolumeExpansion(sc *storagev1.StorageClass) bool {
 	return sc.AllowVolumeExpansion != nil && *sc.AllowVolumeExpansion
 }
 
-func (r *RolloutReconciler) constructPVCForRollout(rollout *oneclickiov1alpha1.Rollout, volSpec oneclickiov1alpha1.VolumeSpec) *corev1.PersistentVolumeClaim {
+func (r *RolloutReconciler) constructPVCForRollout(f *oneclickiov1alpha1.Rollout, volSpec oneclickiov1alpha1.VolumeSpec) *corev1.PersistentVolumeClaim {
 	labels := map[string]string{
-		"rollout.one-click.dev/name": rollout.Name,
-		"project.one-click.dev/name": rollout.Namespace,
+		"one-click.dev/projectId":    f.Namespace,
+		"one-click.dev/deploymentId": f.Name,
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      volSpec.Name,
-			Namespace: rollout.Namespace,
+			Name:      f.Name + "-" + volSpec.Name,
+			Namespace: f.Namespace,
 			Labels:    labels,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
@@ -140,13 +135,13 @@ func (r *RolloutReconciler) constructPVCForRollout(rollout *oneclickiov1alpha1.R
 		},
 	}
 
-	ctrl.SetControllerReference(rollout, pvc, r.Scheme)
+	ctrl.SetControllerReference(f, pvc, r.Scheme)
 	return pvc
 }
 
-func isOwnedByRollout(pvc *corev1.PersistentVolumeClaim, rollout *oneclickiov1alpha1.Rollout) bool {
+func isOwnedByRollout(pvc *corev1.PersistentVolumeClaim, f *oneclickiov1alpha1.Rollout) bool {
 	for _, ref := range pvc.GetOwnerReferences() {
-		if ref.Kind == "Rollout" && ref.Name == rollout.Name {
+		if ref.Kind == "Rollout" && ref.Name == f.Name {
 			return true
 		}
 	}
@@ -154,21 +149,22 @@ func isOwnedByRollout(pvc *corev1.PersistentVolumeClaim, rollout *oneclickiov1al
 }
 
 // deleteAllPVCsForRollout deletes all PVCs associated with a given Rollout
-func (r *RolloutReconciler) deleteAllPVCsForRollout(ctx context.Context, rollout *oneclickiov1alpha1.Rollout) error {
+func (r *RolloutReconciler) deleteAllPVCsForRollout(ctx context.Context, f *oneclickiov1alpha1.Rollout) error {
 	log := log.FromContext(ctx)
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := r.List(ctx, pvcList, client.InNamespace(rollout.Namespace)); err != nil {
-		log.Error(err, "Failed to list PVCs for Rollout", "Rollout.Namespace", rollout.Namespace, "Rollout.Name", rollout.Name)
+	if err := r.List(ctx, pvcList, client.InNamespace(f.Namespace)); err != nil {
+		log.Error(err, "Failed to list PVCs for Rollout", "Rollout.Namespace", f.Namespace, "Rollout.Name", f.Name)
 		return err
 	}
 
 	for _, pvc := range pvcList.Items {
-		if isOwnedByRollout(&pvc, rollout) {
+		if isOwnedByRollout(&pvc, f) {
 			if err := r.Delete(ctx, &pvc); err != nil {
-				log.Error(err, "Failed to delete PVC", "PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
+				r.Recorder.Eventf(f, corev1.EventTypeWarning, "DeletionFailed", "Failed to delete PVC %s", pvc.Name)
 				return err
 			}
+			r.Recorder.Eventf(f, corev1.EventTypeNormal, "Deleted", "Deleted PVC %s", pvc.Name)
 		}
 	}
 

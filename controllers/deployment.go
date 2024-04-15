@@ -20,15 +20,15 @@ import (
 	oneclickiov1alpha1 "github.com/janlauber/one-click-operator/api/v1alpha1"
 )
 
-func (r *RolloutReconciler) reconcileDeployment(ctx context.Context, rollout *oneclickiov1alpha1.Rollout) error {
+func (r *RolloutReconciler) reconcileDeployment(ctx context.Context, f *oneclickiov1alpha1.Rollout) error {
 	log := log.FromContext(ctx)
 
-	desiredDeployment := r.deploymentForRollout(ctx, rollout)
+	desiredDeployment := r.deploymentForRollout(ctx, f)
 
 	currentDeployment := &appsv1.Deployment{}
-	err := r.Get(ctx, types.NamespacedName{Name: rollout.Name, Namespace: rollout.Namespace}, currentDeployment)
+	err := r.Get(ctx, types.NamespacedName{Name: f.Name, Namespace: f.Namespace}, currentDeployment)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating a new Deployment", "Deployment.Namespace", rollout.Namespace, "Deployment.Name", rollout.Name)
+		r.Recorder.Eventf(f, corev1.EventTypeNormal, "Creating", "Creating Deployment %s", f.Name)
 		return r.Create(ctx, desiredDeployment)
 	} else if err != nil {
 		log.Error(err, "Failed to get Deployment")
@@ -36,12 +36,12 @@ func (r *RolloutReconciler) reconcileDeployment(ctx context.Context, rollout *on
 	}
 
 	// Compare the current Deployment with the Rollout spec
-	if needsUpdate(currentDeployment, rollout) {
+	if needsUpdate(currentDeployment, f) {
 		// Update the Deployment to align it with the Rollout spec
 		currentDeployment.Spec = desiredDeployment.Spec
 		err = r.Update(ctx, currentDeployment)
 		if err != nil {
-			log.Error(err, "Failed to update Deployment", "Deployment.Namespace", currentDeployment.Namespace, "Deployment.Name", currentDeployment.Name)
+			r.Recorder.Eventf(f, corev1.EventTypeWarning, "UpdateFailed", "Failed to update Deployment %s", f.Name)
 			return err
 		}
 	}
@@ -50,15 +50,18 @@ func (r *RolloutReconciler) reconcileDeployment(ctx context.Context, rollout *on
 }
 
 func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclickiov1alpha1.Rollout) *appsv1.Deployment {
-	log := log.FromContext(context.Background())
 	// the name of the namespace is the project name
-	labels := map[string]string{"rollout.one-click.dev/name": f.Name, "project.one-click.dev/name": f.Namespace}
+	labels := map[string]string{
+		"one-click.dev/projectId":    f.Namespace,
+		"one-click.dev/deploymentId": f.Name,
+	}
 	replicas := int32(f.Spec.HorizontalScale.MinReplicas)
 
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      f.Name,
 			Namespace: f.Namespace,
+			Labels:    labels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -83,8 +86,7 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 								corev1.ResourceMemory: resource.MustParse(f.Spec.Resources.Limits.Memory),
 							},
 						},
-						Ports: getContainerPorts(f.Spec.Interfaces),
-						Env:   getEnvVars(f.Spec.Env),
+						Env: getEnvVars(f.Spec.Env),
 					}},
 					ServiceAccountName: f.Spec.ServiceAccountName,
 				},
@@ -150,8 +152,7 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 		// Logic to create or get existing secret
 		secretName := f.Name + "-imagepullsecret"
 		if err := r.reconcileImagePullSecret(ctx, f, secretName); err != nil {
-			log.Error(err, "Failed to reconcile Image Pull Secret")
-			// Handle error, possibly return it
+			r.Recorder.Eventf(f, corev1.EventTypeWarning, "ImagePullSecretFailed", "Failed to reconcile Image Pull Secret %s", secretName)
 		}
 
 		// Attach the image pull secret to the deployment
@@ -166,8 +167,7 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 		// Logic to create or get existing secret
 		secretName := f.Name + "-imagepullsecret"
 		if err := r.reconcileImagePullSecret(ctx, f, secretName); err != nil {
-			log.Error(err, "Failed to reconcile Image Pull Secret")
-			// Handle error, possibly return it
+			r.Recorder.Eventf(f, corev1.EventTypeWarning, "ImagePullSecretFailed", "Failed to reconcile Image Pull Secret %s", secretName)
 		}
 	}
 
@@ -177,15 +177,15 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 		var volumeMounts []corev1.VolumeMount
 		for _, v := range f.Spec.Volumes {
 			volumes = append(volumes, corev1.Volume{
-				Name: v.Name,
+				Name: f.Name + "-" + v.Name,
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: v.Name,
+						ClaimName: f.Name + "-" + v.Name,
 					},
 				},
 			})
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      v.Name,
+				Name:      f.Name + "-" + v.Name,
 				MountPath: v.MountPath,
 			})
 		}
@@ -206,16 +206,6 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 
 	ctrl.SetControllerReference(f, dep, r.Scheme)
 	return dep
-}
-
-func getContainerPorts(interfaces []oneclickiov1alpha1.InterfaceSpec) []corev1.ContainerPort {
-	var ports []corev1.ContainerPort
-	for _, i := range interfaces {
-		ports = append(ports, corev1.ContainerPort{
-			ContainerPort: i.Port,
-		})
-	}
-	return ports
 }
 
 func getEnvVars(envVars []oneclickiov1alpha1.EnvVar) []corev1.EnvVar {
@@ -297,7 +287,7 @@ func needsUpdate(current *appsv1.Deployment, f *oneclickiov1alpha1.Rollout) bool
 	}
 
 	// Check volumes
-	if !volumesMatch(current.Spec.Template.Spec.Volumes, f.Spec.Volumes) {
+	if !volumesMatch(current.Spec.Template.Spec.Volumes, f.Spec.Volumes, f) {
 		return true
 	}
 
@@ -311,25 +301,25 @@ func needsUpdate(current *appsv1.Deployment, f *oneclickiov1alpha1.Rollout) bool
 	return false
 }
 
-func volumesMatch(currentVolumes []corev1.Volume, desiredVolumes []oneclickiov1alpha1.VolumeSpec) bool {
+func volumesMatch(currentVolumes []corev1.Volume, desiredVolumes []oneclickiov1alpha1.VolumeSpec, f *oneclickiov1alpha1.Rollout) bool {
 	if len(currentVolumes) != len(desiredVolumes) {
 		return false
 	}
 
 	desiredVolumeMap := make(map[string]oneclickiov1alpha1.VolumeSpec)
 	for _, v := range desiredVolumes {
-		desiredVolumeMap[v.Name] = v
+		desiredVolumeMap[f.Name+"-"+v.Name] = v
 	}
 
 	for _, currentVolume := range currentVolumes {
-		volSpec, exists := desiredVolumeMap[currentVolume.Name]
+		volSpec, exists := desiredVolumeMap[f.Name+"-"+currentVolume.Name]
 		if !exists {
 			// Volume is present in Deployment but not in Rollout spec
 			return false
 		}
 
 		// Check PVC name
-		if currentVolume.VolumeSource.PersistentVolumeClaim.ClaimName != volSpec.Name {
+		if currentVolume.VolumeSource.PersistentVolumeClaim.ClaimName != f.Name+"-"+volSpec.Name {
 			return false
 		}
 		// Additional checks can be added here, such as PVC size, storage class, etc.

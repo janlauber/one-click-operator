@@ -10,16 +10,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func (r *RolloutReconciler) reconcileHPA(ctx context.Context, f *oneclickiov1alpha1.Rollout) error {
-	log := log.FromContext(ctx)
-
 	// Construct the desired HPA object based on the Rollout specification
 	desiredHpa, err := r.hpaForRollout(f)
 	if err != nil {
-		log.Error(err, "Failed to construct HPA", "Namespace", f.Namespace, "Name", f.Name)
 		r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to construct HPA %s", f.Name)
 		return err
 	}
@@ -29,29 +25,24 @@ func (r *RolloutReconciler) reconcileHPA(ctx context.Context, f *oneclickiov1alp
 	err = r.Get(ctx, types.NamespacedName{Name: f.Name, Namespace: f.Namespace}, foundHpa)
 	if err != nil && errors.IsNotFound(err) {
 		// If the HPA is not found, create a new one
-		log.Info("Creating a new HPA", "Namespace", desiredHpa.Namespace, "Name", desiredHpa.Name)
 		err = r.Create(ctx, desiredHpa)
 		if err != nil {
 			// Handle creation error
-			log.Error(err, "Failed to create HPA", "Namespace", desiredHpa.Namespace, "Name", desiredHpa.Name)
 			r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to create HPA %s", f.Name)
 			return err
 		}
 		r.Recorder.Eventf(f, corev1.EventTypeNormal, "Created", "Created HPA %s", f.Name)
 	} else if err != nil {
 		// Handle other errors
-		log.Error(err, "Failed to get HPA", "Namespace", desiredHpa.Namespace, "Name", desiredHpa.Name)
 		r.Recorder.Eventf(f, corev1.EventTypeWarning, "GetFailed", "Failed to get HPA %s", f.Name)
 		return err
 	} else {
 		// If the HPA exists, check if it needs to be updated
 		if needsHpaUpdate(foundHpa, f) {
-			log.Info("Updating HPA", "Namespace", foundHpa.Namespace, "Name", foundHpa.Name)
 			updateHpa(foundHpa, f)
 			err = r.Update(ctx, foundHpa)
 			if err != nil {
 				// Handle update error
-				log.Error(err, "Failed to update HPA", "Namespace", foundHpa.Namespace, "Name", foundHpa.Name)
 				r.Recorder.Eventf(f, corev1.EventTypeWarning, "UpdateFailed", "Failed to update HPA %s", foundHpa.Name)
 				return err
 			}

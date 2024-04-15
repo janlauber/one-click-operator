@@ -22,7 +22,7 @@ func (r *RolloutReconciler) reconcileService(ctx context.Context, f *oneclickiov
 	expectedServices := make(map[string]bool)
 	for _, intf := range f.Spec.Interfaces {
 
-		expectedServices[intf.Name+"-svc"] = true
+		expectedServices[f.Name+"-"+intf.Name+"-svc"] = true
 		// Process each interface
 		service := r.serviceForRollout(f, intf)
 
@@ -30,19 +30,16 @@ func (r *RolloutReconciler) reconcileService(ctx context.Context, f *oneclickiov
 		err := r.Get(ctx, types.NamespacedName{Name: service.Name, Namespace: f.Namespace}, foundService)
 		if err != nil && errors.IsNotFound(err) {
 			// If the Service is not found, create a new one
-			log.Info("Creating a new Service", "Namespace", service.Namespace, "Name", service.Name)
 			err = r.Create(ctx, service)
 			if err != nil {
 				// Handle creation error
-				r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to create Service %s", f.Name)
-				log.Error(err, "Failed to create Service", "Namespace", service.Namespace, "Name", service.Name)
+				r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to create Service %s", service.Name)
 				return err
 			}
-			r.Recorder.Eventf(f, corev1.EventTypeNormal, "Created", "Created Service %s", f.Name)
+			r.Recorder.Eventf(f, corev1.EventTypeNormal, "Created", "Created Service %s", service.Name)
 		} else if err != nil {
 			// Handle other errors
-			r.Recorder.Eventf(f, corev1.EventTypeWarning, "GetFailed", "Failed to get Service %s", f.Name)
-			log.Error(err, "Failed to get Service", "Namespace", service.Namespace, "Name", service.Name)
+			r.Recorder.Eventf(f, corev1.EventTypeWarning, "GetFailed", "Failed to get Service %s", service.Name)
 			return err
 		} else {
 			// If the Service exists, check if it needs to be updated
@@ -53,7 +50,6 @@ func (r *RolloutReconciler) reconcileService(ctx context.Context, f *oneclickiov
 				if err != nil {
 					// Handle update error
 					r.Recorder.Eventf(f, corev1.EventTypeWarning, "UpdateFailed", "Failed to update Service %s", foundService.Name)
-					log.Error(err, "Failed to update Service", "Namespace", foundService.Namespace, "Name", foundService.Name)
 					return err
 				}
 				r.Recorder.Eventf(f, corev1.EventTypeNormal, "Updated", "Updated Service %s", foundService.Name)
@@ -73,13 +69,13 @@ func (r *RolloutReconciler) reconcileService(ctx context.Context, f *oneclickiov
 	for _, service := range serviceList.Items {
 		if _, exists := expectedServices[service.Name]; !exists {
 			// Service is no longer needed, delete it
-			if service.Labels["managed-by"] == "framework-operator" {
+			if service.Labels["one-click.dev/projectId"] == f.Namespace && service.Labels["one-click.dev/deploymentId"] == f.Name {
 				err = r.Delete(ctx, &service)
 				if err != nil {
-					log.Error(err, "Failed to delete service", "Namespace", service.Namespace, "Name", service.Name)
+					r.Recorder.Eventf(f, corev1.EventTypeWarning, "DeletionFailed", "Failed to delete Service %s", service.Name)
 					return err
 				}
-				log.Info("Deleted service", "Namespace", service.Namespace, "Name", service.Name)
+				r.Recorder.Eventf(f, corev1.EventTypeNormal, "Deleted", "Deleted Service %s", service.Name)
 			}
 		}
 	}
@@ -89,16 +85,16 @@ func (r *RolloutReconciler) reconcileService(ctx context.Context, f *oneclickiov
 
 func (r *RolloutReconciler) serviceForRollout(f *oneclickiov1alpha1.Rollout, intf oneclickiov1alpha1.InterfaceSpec) *corev1.Service {
 	labels := map[string]string{
-		"rollout.one-click.dev/name": f.Name,
-		"managed-by":                 "framework-operator", // Unique label to identify operator-managed services
+		"one-click.dev/projectId":    f.Namespace,
+		"one-click.dev/deploymentId": f.Name,
 	}
 	selectorLabels := map[string]string{
-		"rollout.one-click.dev/name": f.Name,
-		"project.one-click.dev/name": f.Namespace,
+		"one-click.dev/projectId":    f.Namespace,
+		"one-click.dev/deploymentId": f.Name,
 	}
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      intf.Name + "-svc", // Create a unique name for the Service
+			Name:      f.Name + "-" + intf.Name + "-svc", // Create a unique name for the Service
 			Namespace: f.Namespace,
 			Labels:    labels,
 		},

@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 
 	oneclickiov1alpha1 "github.com/janlauber/one-click-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -11,7 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -19,75 +17,53 @@ import (
 func (r *RolloutReconciler) reconcilePVCs(ctx context.Context, f *oneclickiov1alpha1.Rollout) error {
 	log := log.FromContext(ctx)
 
-	// Check if the Rollout spec's volume list is empty
 	if len(f.Spec.Volumes) == 0 {
-		// If no volumes are defined, delete all PVCs associated with this Rollout
 		return r.deleteAllPVCsForRollout(ctx, f)
 	}
 
-	// Keep track of the PVCs that should exist according to the Rollout specification
 	expectedPVCs := make(map[string]struct{})
 	for _, volSpec := range f.Spec.Volumes {
-		// expectedPVCs[volSpec.Name] = struct{}{}
-		expectedPVCs[f.Name+"-"+volSpec.Name] = struct{}{}
-		desiredPvc := r.constructPVCForRollout(f, volSpec)
+		pvcName := f.Name + "-" + volSpec.Name
+		expectedPVCs[pvcName] = struct{}{}
 
-		foundPvc := &corev1.PersistentVolumeClaim{}
-		err := r.Get(ctx, types.NamespacedName{Name: desiredPvc.Name, Namespace: f.Namespace}, foundPvc)
+		desiredPVC := r.constructPVCForRollout(f, volSpec)
+		foundPVC := &corev1.PersistentVolumeClaim{}
+		err := r.Get(ctx, types.NamespacedName{Name: pvcName, Namespace: f.Namespace}, foundPVC)
 		if err != nil && errors.IsNotFound(err) {
-			err = r.Create(ctx, desiredPvc)
-			if err != nil {
-				r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to create PVC %s", desiredPvc.Name)
+			if err := r.Create(ctx, desiredPVC); err != nil {
+				r.Recorder.Eventf(f, corev1.EventTypeWarning, "CreationFailed", "Failed to create PVC %s", pvcName)
 				return err
 			}
-			r.Recorder.Eventf(f, corev1.EventTypeNormal, "Created", "Created PVC %s", desiredPvc.Name)
+			r.Recorder.Eventf(f, corev1.EventTypeNormal, "Created", "Created PVC %s", pvcName)
 		} else if err != nil {
-			r.Recorder.Eventf(f, corev1.EventTypeWarning, "GetFailed", "Failed to get PVC %s", desiredPvc.Name)
+			r.Recorder.Eventf(f, corev1.EventTypeWarning, "GetFailed", "Failed to get PVC %s", pvcName)
 			return err
-		} else {
-			// Existing PVC found, check for changes
-
-			// Preventing name and storage class changes
-			if foundPvc.Name != desiredPvc.Name || (foundPvc.Spec.StorageClassName != nil && *foundPvc.Spec.StorageClassName != *desiredPvc.Spec.StorageClassName) {
-				log.Error(fmt.Errorf("name or storage class change not allowed"), "Invalid PVC update", "PVC.Name", foundPvc.Name)
-				return fmt.Errorf("name or storage class change not allowed for PVC %s", foundPvc.Name)
+		} else if currentSize, desiredSize := foundPVC.Spec.Resources.Requests[corev1.ResourceStorage], resource.MustParse(volSpec.Size); desiredSize.Cmp(currentSize) > 0 {
+			if foundPVC.Spec.VolumeMode == nil || *foundPVC.Spec.VolumeMode != corev1.PersistentVolumeFilesystem {
+				log.Info("PVC resizing is only supported for filesystem volume mode")
+				return nil
 			}
 
-			// Handle size increase
-			currentSize := foundPvc.Spec.Resources.Requests[corev1.ResourceStorage]
-			desiredSize := resource.MustParse(volSpec.Size)
-			if desiredSize.Cmp(currentSize) > 0 {
-
-				// Check if PVC and its StorageClass allow resizing
-				if foundPvc.Spec.VolumeMode == nil || *foundPvc.Spec.VolumeMode != corev1.PersistentVolumeFilesystem {
-					log.Info("PVC resizing is only supported for filesystem volume mode")
-					return nil // or handle the error as per your application's logic
-				}
-
-				storageClass := &storagev1.StorageClass{}
-				if err := r.Get(ctx, types.NamespacedName{Name: *foundPvc.Spec.StorageClassName}, storageClass); err != nil {
-					log.Error(err, "Failed to get the storage class of the PVC", "StorageClass", *foundPvc.Spec.StorageClassName)
-					return err
-				}
-
-				if !allowsVolumeExpansion(storageClass) {
-					log.Info("StorageClass does not allow volume expansion", "StorageClass", storageClass.Name)
-					return nil // or handle the error as per your application's logic
-				}
-
-				// Update PVC size (considering Kubernetes limitations - PVCs can generally only be increased in size)
-				foundPvc.Spec.Resources.Requests[corev1.ResourceStorage] = desiredSize
-				err := r.Update(ctx, foundPvc)
-				if err != nil {
-					log.Error(err, "Failed to update PVC size", "PVC.Namespace", foundPvc.Namespace, "PVC.Name", foundPvc.Name)
-					return err
-				}
-				r.Recorder.Eventf(f, corev1.EventTypeNormal, "Updated", "Updated PVC %s", foundPvc.Name)
+			storageClass := &storagev1.StorageClass{}
+			if err := r.Get(ctx, types.NamespacedName{Name: *foundPVC.Spec.StorageClassName}, storageClass); err != nil {
+				log.Error(err, "Failed to get the storage class of the PVC", "StorageClass", *foundPVC.Spec.StorageClassName)
+				return err
 			}
+
+			if !allowsVolumeExpansion(storageClass) {
+				log.Info("StorageClass does not allow volume expansion", "StorageClass", storageClass.Name)
+				return nil
+			}
+
+			foundPVC.Spec.Resources.Requests[corev1.ResourceStorage] = desiredSize
+			if err := r.Update(ctx, foundPVC); err != nil {
+				log.Error(err, "Failed to update PVC size", "PVC.Namespace", foundPVC.Namespace, "PVC.Name", pvcName)
+				return err
+			}
+			r.Recorder.Eventf(f, corev1.EventTypeNormal, "Updated", "Updated PVC %s", pvcName)
 		}
 	}
 
-	// List all PVCs in the namespace
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	if err := r.List(ctx, pvcList, client.InNamespace(f.Namespace)); err != nil {
 		log.Error(err, "Failed to list PVCs", "Rollout.Namespace", f.Namespace)
@@ -96,7 +72,6 @@ func (r *RolloutReconciler) reconcilePVCs(ctx context.Context, f *oneclickiov1al
 
 	for _, pvc := range pvcList.Items {
 		if _, exists := expectedPVCs[pvc.Name]; !exists && isOwnedByRollout(&pvc, f) {
-			// Delete the PVC if it's not in the expected list and is owned by the Rollout
 			if err := r.Delete(ctx, &pvc); err != nil {
 				r.Recorder.Eventf(f, corev1.EventTypeWarning, "DeletionFailed", "Failed to delete PVC %s", pvc.Name)
 				return err
@@ -118,25 +93,21 @@ func (r *RolloutReconciler) constructPVCForRollout(f *oneclickiov1alpha1.Rollout
 		"one-click.dev/deploymentId": f.Name,
 	}
 
-	pvc := &corev1.PersistentVolumeClaim{
+	return &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      f.Name + "-" + volSpec.Name,
 			Namespace: f.Namespace,
 			Labels:    labels,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(f, f.GroupVersionKind()),
+			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse(volSpec.Size),
-				},
-			},
+			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources:        corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(volSpec.Size)}},
 			StorageClassName: &volSpec.StorageClass,
 		},
 	}
-
-	ctrl.SetControllerReference(f, pvc, r.Scheme)
-	return pvc
 }
 
 func isOwnedByRollout(pvc *corev1.PersistentVolumeClaim, f *oneclickiov1alpha1.Rollout) bool {
@@ -148,13 +119,12 @@ func isOwnedByRollout(pvc *corev1.PersistentVolumeClaim, f *oneclickiov1alpha1.R
 	return false
 }
 
-// deleteAllPVCsForRollout deletes all PVCs associated with a given Rollout
 func (r *RolloutReconciler) deleteAllPVCsForRollout(ctx context.Context, f *oneclickiov1alpha1.Rollout) error {
 	log := log.FromContext(ctx)
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	if err := r.List(ctx, pvcList, client.InNamespace(f.Namespace)); err != nil {
-		log.Error(err, "Failed to list PVCs for Rollout", "Rollout.Namespace", f.Namespace, "Rollout.Name", f.Name)
+		log.Error(err, "Failed to list PVCs for Rollout", "Rollout.Namespace", f.Namespace)
 		return err
 	}
 

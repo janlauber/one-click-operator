@@ -118,9 +118,7 @@ func (r *RolloutReconciler) updateStatus(ctx context.Context, f *oneclickiov1alp
 	// List the Ingresses
 	ingressList := &networkingv1.IngressList{}
 	listOpts = []client.ListOption{
-		client.InNamespace(f.Namespace),
-		// If you have a specific label selector, uncomment the following line:
-		// client.MatchingLabelsSelector{Selector: labels.SelectorFromSet(labelSelector)},
+		client.MatchingLabels{"one-click.dev/deploymentId": f.Name},
 	}
 
 	err = r.List(ctx, ingressList, listOpts...)
@@ -155,8 +153,9 @@ func (r *RolloutReconciler) updateStatus(ctx context.Context, f *oneclickiov1alp
 	// List the Services
 	serviceList := &corev1.ServiceList{}
 	listOpts = []client.ListOption{
-		client.InNamespace(f.Namespace),
-		// Use label selectors if applicable
+		// client.InNamespace(f.Namespace),
+		// Use label selectors to only select services with one-click.dev/deploymentId=f.Name
+		client.MatchingLabels{"one-click.dev/deploymentId": f.Name},
 	}
 
 	err = r.List(ctx, serviceList, listOpts...)
@@ -191,7 +190,8 @@ func (r *RolloutReconciler) updateStatus(ctx context.Context, f *oneclickiov1alp
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	listOpts = []client.ListOption{
 		client.InNamespace(f.Namespace),
-		// Use label selectors if applicable
+		// Use label selectors to only select PVCs with one-click.dev/deploymentId=f.Name
+		client.MatchingLabels{"one-click.dev/deploymentId": f.Name},
 	}
 
 	err = r.List(ctx, pvcList, listOpts...)

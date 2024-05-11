@@ -1,5 +1,7 @@
 # One-Click Operator
 
+[![CodeFactor](https://www.codefactor.io/repository/github/janlauber/one-click-operator/badge)](https://www.codefactor.io/repository/github/janlauber/one-click-operator)
+
 ## Description
 
 The purpose of this Kubernetes operator is to significantly streamline the deployment process of single-container applications on Kubernetes. Traditionally, deploying such an application requires a series of complex steps, including setting up a deployment, a service, an ingress, a horizontal pod autoscaler, a service account, and optionally, a certificate. Each of these steps involves intricate configurations and a deep understanding of Kubernetes' workings.

@@ -42,6 +42,8 @@ func (r *RolloutReconciler) reconcileDeployment(ctx context.Context, f *oneclick
 		// Deployment found, check if it needs updating
 		desiredDeployment := r.deploymentForRollout(ctx, f)
 		if needsUpdate(currentDeployment, f) {
+			// ignore the replicas field because it is managed by the HorizontalPodAutoscaler
+			desiredDeployment.Spec.Replicas = currentDeployment.Spec.Replicas
 			// Update the Deployment to align it with the Rollout spec
 			currentDeployment.Spec = desiredDeployment.Spec
 			updateErr := r.Update(ctx, currentDeployment)
@@ -62,12 +64,10 @@ func (r *RolloutReconciler) reconcileDeployment(ctx context.Context, f *oneclick
 }
 
 func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclickiov1alpha1.Rollout) *appsv1.Deployment {
-	// the name of the namespace is the project name
 	labels := map[string]string{
 		"one-click.dev/projectId":    f.Namespace,
 		"one-click.dev/deploymentId": f.Name,
 	}
-	replicas := int32(f.Spec.HorizontalScale.MinReplicas)
 
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -76,7 +76,6 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 			Labels:    labels,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
@@ -233,9 +232,9 @@ func getEnvVars(envVars []oneclickiov1alpha1.EnvVar) []corev1.EnvVar {
 
 func needsUpdate(current *appsv1.Deployment, f *oneclickiov1alpha1.Rollout) bool {
 	// Check replicas
-	if *current.Spec.Replicas != int32(f.Spec.HorizontalScale.MinReplicas) {
-		return true
-	}
+	// if *current.Spec.Replicas != int32(f.Spec.HorizontalScale.MinReplicas) {
+	// 	return true
+	// }
 
 	// Check security context
 	if !reflect.DeepEqual(current.Spec.Template.Spec.SecurityContext, &corev1.PodSecurityContext{

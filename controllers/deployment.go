@@ -77,6 +77,22 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 		}
 	}
 
+	// Determine the rollout strategy
+	strategy := appsv1.DeploymentStrategy{
+		Type: appsv1.RollingUpdateDeploymentStrategyType,
+	}
+
+	if f.Spec.RolloutStrategy != "" {
+		switch f.Spec.RolloutStrategy {
+		case "recreate":
+			strategy.Type = appsv1.RecreateDeploymentStrategyType
+		case "rollingUpdate":
+			strategy.Type = appsv1.RollingUpdateDeploymentStrategyType
+		default:
+			strategy.Type = appsv1.RollingUpdateDeploymentStrategyType
+		}
+	}
+
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      f.Name,
@@ -102,6 +118,7 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 					ImagePullSecrets:   imagePullSecrets,
 				},
 			},
+			Strategy: strategy,
 		},
 	}
 
@@ -264,6 +281,35 @@ func needsUpdate(current *appsv1.Deployment, f *oneclickiov1alpha1.Rollout) bool
 
 	// Check service account name
 	if current.Spec.Template.Spec.ServiceAccountName != f.Spec.ServiceAccountName {
+		return true
+	}
+
+	// Check command
+	if !reflect.DeepEqual(current.Spec.Template.Spec.Containers[0].Command, f.Spec.Command) {
+		return true
+	}
+
+	// Check args
+	if !reflect.DeepEqual(current.Spec.Template.Spec.Containers[0].Args, f.Spec.Args) {
+		return true
+	}
+
+	// Check rollout strategy
+	strategy := appsv1.DeploymentStrategy{
+		Type: appsv1.RollingUpdateDeploymentStrategyType,
+	}
+	if f.Spec.RolloutStrategy != "" {
+		switch f.Spec.RolloutStrategy {
+		case "recreate":
+			strategy.Type = appsv1.RecreateDeploymentStrategyType
+		case "rollingUpdate":
+			strategy.Type = appsv1.RollingUpdateDeploymentStrategyType
+		default:
+			strategy.Type = appsv1.RollingUpdateDeploymentStrategyType
+		}
+	}
+
+	if !reflect.DeepEqual(current.Spec.Strategy, strategy) {
 		return true
 	}
 

@@ -116,6 +116,7 @@ type CronJobSpec struct {
 type RolloutSpec struct {
 	Args               []string             `json:"args,omitempty"`
 	Command            []string             `json:"command,omitempty"`
+	RolloutStrategy    string               `json:"rolloutStrategy,omitempty"`
 	Image              ImageSpec            `json:"image"`
 	SecurityContext    SecurityContextSpec  `json:"securityContext,omitempty"`
 	HorizontalScale    HorizontalScaleSpec  `json:"horizontalScale"`
@@ -174,6 +175,12 @@ type RolloutStatus struct {
 //+kubebuilder:printcolumn:name="ImageTag",type="string",JSONPath=".spec.image.tag"
 //+kubebuilder:printcolumn:name="Replicas",type="integer",JSONPath=".spec.horizontalScale.minReplicas"
 //+kubebuilder:printcolumn:name="Deployment Status",type="string",JSONPath=".status.deployment.status"
+//+kubebuilder:printcolumn:name="Service Status",type="string",JSONPath=".status.services[*].status"
+//+kubebuilder:printcolumn:name="Ingress Status",type="string",JSONPath=".status.ingresses[*].status"
+//+kubebuilder:printcolumn:name="Volume Status",type="string",JSONPath=".status.volumes[*].status"
+//+kubebuilder:printcolumn:name="Service Account",type="string",JSONPath=".spec.serviceAccountName"
+//+kubebuilder:printcolumn:name="Rollout Strategy",type="string",JSONPath=".spec.rolloutStrategy"
+//+kubebuilder:printcolumn:name="Creation Timestamp",type="date",JSONPath=".metadata.creationTimestamp"
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // +kubebuilder:object:root=true

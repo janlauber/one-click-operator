@@ -27,3 +27,4 @@ Dockerfile.cross
 vendor/
 
 test.yaml
+.DS_Store

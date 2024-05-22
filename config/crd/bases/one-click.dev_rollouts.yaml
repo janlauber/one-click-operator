@@ -28,6 +28,24 @@ spec:
     - jsonPath: .status.deployment.status
       name: Deployment Status
       type: string
+    - jsonPath: .status.services[*].status
+      name: Service Status
+      type: string
+    - jsonPath: .status.ingresses[*].status
+      name: Ingress Status
+      type: string
+    - jsonPath: .status.volumes[*].status
+      name: Volume Status
+      type: string
+    - jsonPath: .spec.serviceAccountName
+      name: Service Account
+      type: string
+    - jsonPath: .spec.rolloutStrategy
+      name: Rollout Strategy
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Creation Timestamp
+      type: date
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -257,6 +275,8 @@ spec:
                 - limits
                 - requests
                 type: object
+              rolloutStrategy:
+                type: string
               secrets:
                 items:
                   properties:

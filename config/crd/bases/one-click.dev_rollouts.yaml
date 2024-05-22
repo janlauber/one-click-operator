@@ -58,6 +58,92 @@ spec:
                 items:
                   type: string
                 type: array
+              cronjobs:
+                items:
+                  properties:
+                    args:
+                      items:
+                        type: string
+                      type: array
+                    backoffLimit:
+                      format: int32
+                      type: integer
+                    command:
+                      items:
+                        type: string
+                      type: array
+                    env:
+                      items:
+                        properties:
+                          name:
+                            type: string
+                          value:
+                            type: string
+                        required:
+                        - name
+                        - value
+                        type: object
+                      type: array
+                    image:
+                      properties:
+                        password:
+                          type: string
+                        registry:
+                          type: string
+                        repository:
+                          type: string
+                        tag:
+                          type: string
+                        username:
+                          type: string
+                      required:
+                      - registry
+                      - repository
+                      - tag
+                      type: object
+                    maxRetries:
+                      format: int32
+                      type: integer
+                    name:
+                      type: string
+                    resources:
+                      properties:
+                        limits:
+                          properties:
+                            cpu:
+                              type: string
+                            memory:
+                              type: string
+                          required:
+                          - cpu
+                          - memory
+                          type: object
+                        requests:
+                          properties:
+                            cpu:
+                              type: string
+                            memory:
+                              type: string
+                          required:
+                          - cpu
+                          - memory
+                          type: object
+                      required:
+                      - limits
+                      - requests
+                      type: object
+                    schedule:
+                      type: string
+                    suspend:
+                      type: boolean
+                  required:
+                  - image
+                  - name
+                  - resources
+                  - schedule
+                  - suspend
+                  type: object
+                type: array
               env:
                 items:
                   properties:

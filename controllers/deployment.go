@@ -116,6 +116,8 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 					}},
 					ServiceAccountName: f.Spec.ServiceAccountName,
 					ImagePullSecrets:   imagePullSecrets,
+					NodeSelector:       f.Spec.NodeSelector,
+					Tolerations:        getTolerations(f.Spec.Tolerations),
 				},
 			},
 			Strategy: strategy,
@@ -313,9 +315,33 @@ func needsUpdate(current *appsv1.Deployment, f *oneclickiov1alpha1.Rollout) bool
 		return true
 	}
 
+	// Check node selector
+	if !reflect.DeepEqual(current.Spec.Template.Spec.NodeSelector, f.Spec.NodeSelector) {
+		return true
+	}
+
+	// Check tolerations
+	if !reflect.DeepEqual(current.Spec.Template.Spec.Tolerations, getTolerations(f.Spec.Tolerations)) {
+		return true
+	}
+
 	// Add more checks as necessary, e.g., labels, annotations, specific configuration, etc.
 
 	return false
+}
+
+func getTolerations(tolerations []corev1.Toleration) []corev1.Toleration {
+	var result []corev1.Toleration
+	for _, t := range tolerations {
+		result = append(result, corev1.Toleration{
+			Key:               t.Key,
+			Operator:          corev1.TolerationOperator(t.Operator),
+			Value:             t.Value,
+			Effect:            corev1.TaintEffect(t.Effect),
+			TolerationSeconds: t.TolerationSeconds,
+		})
+	}
+	return result
 }
 
 func volumesMatch(currentVolumes []corev1.Volume, desiredVolumes []oneclickiov1alpha1.VolumeSpec, f *oneclickiov1alpha1.Rollout) bool {

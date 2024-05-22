@@ -24,6 +24,13 @@ spec:
   args: ["nginx", "-g", "daemon off;"]
   command: ["nginx"]
   rolloutStrategy: rollingUpdate # or "recreate"
+  nodeSelector:
+    kubernetes.io/hostname: minikube
+  tolerations:
+    - key: "storage"
+      operator: "Equal"
+      value: "ssd"
+      effect: "NoSchedule"
   image:
     registry: "docker.io"
     repository: "nginx"

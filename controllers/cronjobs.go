@@ -8,7 +8,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -25,6 +24,17 @@ func (r *RolloutReconciler) reconcileCronJobs(ctx context.Context, instance *one
 	definedCronJobs := make(map[string]oneclickiov1alpha1.CronJobSpec)
 	for _, cronJobSpec := range instance.Spec.CronJobs {
 		definedCronJobs[cronJobSpec.Name] = cronJobSpec
+
+		// Handle image pull secret if username and password are provided
+		var imagePullSecrets []corev1.LocalObjectReference
+		if cronJobSpec.Image.Username != "" && cronJobSpec.Image.Password != "" {
+			secretName := cronJobSpec.Name + "-imagepullsecret"
+			if err := reconcileImagePullSecret(ctx, r.Client, instance, cronJobSpec.Image, secretName, instance.Namespace); err != nil {
+				return err
+			}
+			imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: secretName})
+		}
+
 		cronJob := &batchv1.CronJob{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cronJobSpec.Name,
@@ -39,24 +49,16 @@ func (r *RolloutReconciler) reconcileCronJobs(ctx context.Context, instance *one
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
 									{
-										Name:    cronJobSpec.Name,
-										Image:   fmt.Sprintf("%s/%s:%s", cronJobSpec.Image.Registry, cronJobSpec.Image.Repository, cronJobSpec.Image.Tag),
-										Command: cronJobSpec.Command,
-										Args:    cronJobSpec.Args,
-										Env:     getEnvVars(cronJobSpec.Env),
-										Resources: corev1.ResourceRequirements{
-											Limits: corev1.ResourceList{
-												corev1.ResourceCPU:    resource.MustParse(cronJobSpec.Resources.Limits.CPU),
-												corev1.ResourceMemory: resource.MustParse(cronJobSpec.Resources.Limits.Memory),
-											},
-											Requests: corev1.ResourceList{
-												corev1.ResourceCPU:    resource.MustParse(cronJobSpec.Resources.Requests.CPU),
-												corev1.ResourceMemory: resource.MustParse(cronJobSpec.Resources.Requests.Memory),
-											},
-										},
+										Name:      cronJobSpec.Name,
+										Image:     fmt.Sprintf("%s/%s:%s", cronJobSpec.Image.Registry, cronJobSpec.Image.Repository, cronJobSpec.Image.Tag),
+										Command:   cronJobSpec.Command,
+										Args:      cronJobSpec.Args,
+										Env:       getEnvVars(cronJobSpec.Env),
+										Resources: createResourceRequirements(cronJobSpec.Resources),
 									},
 								},
-								RestartPolicy: corev1.RestartPolicyOnFailure,
+								RestartPolicy:    corev1.RestartPolicyOnFailure,
+								ImagePullSecrets: imagePullSecrets,
 							},
 						},
 						BackoffLimit: &cronJobSpec.BackoffLimit,
@@ -117,14 +119,3 @@ func (r *RolloutReconciler) reconcileCronJobs(ctx context.Context, instance *one
 func needsUpdateCronJob(current *batchv1.CronJob, desired *batchv1.CronJob) bool {
 	return !reflect.DeepEqual(current.Spec, desired.Spec)
 }
-
-// func getEnvVars(envVars []oneclickiov1alpha1.EnvVar) []corev1.EnvVar {
-// 	var envs []corev1.EnvVar
-// 	for _, env := range envVars {
-// 		envs = append(envs, corev1.EnvVar{
-// 			Name:  env.Name,
-// 			Value: env.Value,
-// 		})
-// 	}
-// 	return envs
-// }

@@ -86,6 +86,29 @@ spec:
           - host: "reflex.oneclickapps.dev"
             path: "/test"
             tls: false
+  cronjobs:
+    - name: some-bash-job
+      suspend: false
+      image:
+        password: ""
+        registry: docker.io
+        repository: library/busybox
+        tag: latest
+        username: ""
+      schedule: "*/1 * * * *"
+      command: ["echo", "hello"]
+      maxRetries: 3
+      backoffLimit: 2
+      env:
+        - name: SOME_ENV
+          value: "some-value"
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 100m
+          memory: 256Mi
   serviceAccountName: "nginx"
 ```
 

@@ -99,6 +99,19 @@ type IngressRule struct {
 	TlsSecretName string `json:"tlsSecretName,omitempty"`
 }
 
+type CronJobSpec struct {
+	Name         string               `json:"name"`
+	Suspend      bool                 `json:"suspend"`
+	Image        ImageSpec            `json:"image"`
+	Schedule     string               `json:"schedule"`
+	Command      []string             `json:"command,omitempty"`
+	Args         []string             `json:"args,omitempty"`
+	MaxRetries   int32                `json:"maxRetries,omitempty"`
+	BackoffLimit int32                `json:"backoffLimit,omitempty"`
+	Env          []EnvVar             `json:"env,omitempty"`
+	Resources    ResourceRequirements `json:"resources"`
+}
+
 // RolloutSpec defines the desired state of Rollout
 type RolloutSpec struct {
 	Args               []string             `json:"args,omitempty"`
@@ -112,6 +125,7 @@ type RolloutSpec struct {
 	Volumes            []VolumeSpec         `json:"volumes,omitempty"`
 	Interfaces         []InterfaceSpec      `json:"interfaces,omitempty"`
 	ServiceAccountName string               `json:"serviceAccountName"`
+	CronJobs           []CronJobSpec        `json:"cronjobs,omitempty"`
 }
 
 type Resources struct {

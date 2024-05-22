@@ -21,6 +21,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -123,6 +124,12 @@ func (r *RolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Reconcile CronJobs
+	if err := r.reconcileCronJobs(ctx, &rollout); err != nil {
+		log.Error(err, "Failed to reconcile CronJobs.")
+		return ctrl.Result{}, err
+	}
+
 	// Update status
 	if err := r.updateStatus(ctx, &rollout); err != nil {
 		if errors.IsConflict(err) {
@@ -138,6 +145,18 @@ func (r *RolloutReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &batchv1.CronJob{}, "metadata.ownerReferences.uid", func(rawObj client.Object) []string {
+		cronJob := rawObj.(*batchv1.CronJob)
+		ownerRefs := cronJob.GetOwnerReferences()
+		ownerUIDs := make([]string, len(ownerRefs))
+		for i, ownerRef := range ownerRefs {
+			ownerUIDs[i] = string(ownerRef.UID)
+		}
+		return ownerUIDs
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&oneclickiov1alpha1.Rollout{}).
 		Owns(&appsv1.Deployment{}).
@@ -147,5 +166,6 @@ func (r *RolloutReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
 		Owns(&corev1.ServiceAccount{}).
+		Owns(&batchv1.CronJob{}).
 		Complete(r)
 }

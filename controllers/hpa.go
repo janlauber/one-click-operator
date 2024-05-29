@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"reflect"
 
 	oneclickiov1alpha1 "github.com/janlauber/one-click-operator/api/v1alpha1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -114,22 +115,7 @@ func (r *RolloutReconciler) hpaForRollout(f *oneclickiov1alpha1.Rollout) (*autos
 }
 
 func needsHpaUpdate(current *autoscalingv2.HorizontalPodAutoscaler, f *oneclickiov1alpha1.Rollout) bool {
-	// Check MinReplicas
-	if *current.Spec.MinReplicas != f.Spec.HorizontalScale.MinReplicas {
-		return true
-	}
-
-	// Check MaxReplicas
-	if current.Spec.MaxReplicas != f.Spec.HorizontalScale.MaxReplicas {
-		return true
-	}
-
-	// Check TargetCPUUtilizationPercentage
-	if *current.Spec.Metrics[0].Resource.Target.AverageUtilization != f.Spec.HorizontalScale.TargetCPUUtilizationPercentage {
-		return true
-	}
-
-	return false
+	return !reflect.DeepEqual(current.Spec, f.Spec)
 }
 
 func updateHpa(hpa *autoscalingv2.HorizontalPodAutoscaler, f *oneclickiov1alpha1.Rollout) {

@@ -17,19 +17,24 @@ import (
 	oneclickiov1alpha1 "github.com/janlauber/one-click-operator/api/v1alpha1"
 )
 
-func (r *RolloutReconciler) reconcileCronJobs(ctx context.Context, instance *oneclickiov1alpha1.Rollout) error {
+func (r *RolloutReconciler) reconcileCronJobs(ctx context.Context, f *oneclickiov1alpha1.Rollout) error {
 	log := log.FromContext(ctx)
+
+	labels := map[string]string{
+		"one-click.dev/projectId":    f.Namespace,
+		"one-click.dev/deploymentId": f.Name,
+	}
 
 	// Track the CronJobs defined in the Rollout spec
 	definedCronJobs := make(map[string]oneclickiov1alpha1.CronJobSpec)
-	for _, cronJobSpec := range instance.Spec.CronJobs {
+	for _, cronJobSpec := range f.Spec.CronJobs {
 		definedCronJobs[cronJobSpec.Name] = cronJobSpec
 
 		// Handle image pull secret if username and password are provided
 		var imagePullSecrets []corev1.LocalObjectReference
 		if cronJobSpec.Image.Username != "" && cronJobSpec.Image.Password != "" {
 			secretName := cronJobSpec.Name + "-imagepullsecret"
-			if err := reconcileImagePullSecret(ctx, r.Client, instance, cronJobSpec.Image, secretName, instance.Namespace); err != nil {
+			if err := reconcileImagePullSecret(ctx, r.Client, f, cronJobSpec.Image, secretName, f.Namespace); err != nil {
 				return err
 			}
 			imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: secretName})
@@ -38,14 +43,21 @@ func (r *RolloutReconciler) reconcileCronJobs(ctx context.Context, instance *one
 		cronJob := &batchv1.CronJob{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cronJobSpec.Name,
-				Namespace: instance.Namespace,
+				Namespace: f.Namespace,
+				Labels:    labels,
 			},
 			Spec: batchv1.CronJobSpec{
 				Suspend:  &cronJobSpec.Suspend,
 				Schedule: cronJobSpec.Schedule,
 				JobTemplate: batchv1.JobTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: labels,
+					},
 					Spec: batchv1.JobSpec{
 						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: labels,
+							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
 									{
@@ -57,7 +69,7 @@ func (r *RolloutReconciler) reconcileCronJobs(ctx context.Context, instance *one
 										Resources: createResourceRequirements(cronJobSpec.Resources),
 									},
 								},
-								RestartPolicy:    corev1.RestartPolicyOnFailure,
+								RestartPolicy:    corev1.RestartPolicyNever,
 								ImagePullSecrets: imagePullSecrets,
 							},
 						},
@@ -68,7 +80,7 @@ func (r *RolloutReconciler) reconcileCronJobs(ctx context.Context, instance *one
 		}
 
 		// Set Rollout instance as the owner and controller
-		if err := ctrl.SetControllerReference(instance, cronJob, r.Scheme); err != nil {
+		if err := ctrl.SetControllerReference(f, cronJob, r.Scheme); err != nil {
 			return err
 		}
 
@@ -98,7 +110,7 @@ func (r *RolloutReconciler) reconcileCronJobs(ctx context.Context, instance *one
 
 	// List all CronJobs in the namespace to find any that are not defined in the Rollout spec
 	var existingCronJobs batchv1.CronJobList
-	if err := r.List(ctx, &existingCronJobs, client.InNamespace(instance.Namespace), client.MatchingFields{"metadata.ownerReferences.uid": string(instance.UID)}); err != nil {
+	if err := r.List(ctx, &existingCronJobs, client.InNamespace(f.Namespace), client.MatchingFields{"metadata.ownerReferences.uid": string(f.UID)}); err != nil {
 		return err
 	}
 
@@ -117,5 +129,11 @@ func (r *RolloutReconciler) reconcileCronJobs(ctx context.Context, instance *one
 
 // Helper function to check if the CronJob needs to be updated
 func needsUpdateCronJob(current *batchv1.CronJob, desired *batchv1.CronJob) bool {
-	return !reflect.DeepEqual(current.Spec, desired.Spec)
+	if !reflect.DeepEqual(current.Spec, desired.Spec) {
+		return true
+	}
+	if !reflect.DeepEqual(current.ObjectMeta.Labels, desired.ObjectMeta.Labels) {
+		return true
+	}
+	return false
 }

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"reflect"
 
 	oneclickiov1alpha1 "github.com/janlauber/one-click-operator/api/v1alpha1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -9,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -54,12 +56,37 @@ func (r *RolloutReconciler) reconcileHPA(ctx context.Context, f *oneclickiov1alp
 }
 
 func (r *RolloutReconciler) hpaForRollout(f *oneclickiov1alpha1.Rollout) (*autoscalingv2.HorizontalPodAutoscaler, error) {
+	// construct Behavior default values
+	ScaleUpBehavior := &autoscalingv2.HorizontalPodAutoscalerBehavior{
+		ScaleUp: &autoscalingv2.HPAScalingRules{
+			StabilizationWindowSeconds: ptr.To(int32(0)),
+			Policies: []autoscalingv2.HPAScalingPolicy{
+				{
+					Type:          autoscalingv2.PercentScalingPolicy,
+					Value:         100,
+					PeriodSeconds: 15,
+				},
+			},
+		},
+		ScaleDown: &autoscalingv2.HPAScalingRules{
+			StabilizationWindowSeconds: ptr.To(int32(300)),
+			Policies: []autoscalingv2.HPAScalingPolicy{
+				{
+					Type:          autoscalingv2.PercentScalingPolicy,
+					Value:         100,
+					PeriodSeconds: 60,
+				},
+			},
+		},
+	}
+
 	hpa := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      f.Name,
 			Namespace: f.Namespace,
 		},
 		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			Behavior: ScaleUpBehavior,
 			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
 				APIVersion: "apps/v1",
 				Kind:       "Deployment",
@@ -88,22 +115,7 @@ func (r *RolloutReconciler) hpaForRollout(f *oneclickiov1alpha1.Rollout) (*autos
 }
 
 func needsHpaUpdate(current *autoscalingv2.HorizontalPodAutoscaler, f *oneclickiov1alpha1.Rollout) bool {
-	// Check MinReplicas
-	if *current.Spec.MinReplicas != f.Spec.HorizontalScale.MinReplicas {
-		return true
-	}
-
-	// Check MaxReplicas
-	if current.Spec.MaxReplicas != f.Spec.HorizontalScale.MaxReplicas {
-		return true
-	}
-
-	// Check TargetCPUUtilizationPercentage
-	if *current.Spec.Metrics[0].Resource.Target.AverageUtilization != f.Spec.HorizontalScale.TargetCPUUtilizationPercentage {
-		return true
-	}
-
-	return false
+	return !reflect.DeepEqual(current.Spec, f.Spec)
 }
 
 func updateHpa(hpa *autoscalingv2.HorizontalPodAutoscaler, f *oneclickiov1alpha1.Rollout) {

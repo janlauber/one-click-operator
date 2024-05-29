@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -54,12 +55,37 @@ func (r *RolloutReconciler) reconcileHPA(ctx context.Context, f *oneclickiov1alp
 }
 
 func (r *RolloutReconciler) hpaForRollout(f *oneclickiov1alpha1.Rollout) (*autoscalingv2.HorizontalPodAutoscaler, error) {
+	// construct Behavior default values
+	ScaleUpBehavior := &autoscalingv2.HorizontalPodAutoscalerBehavior{
+		ScaleUp: &autoscalingv2.HPAScalingRules{
+			StabilizationWindowSeconds: ptr.To(int32(0)),
+			Policies: []autoscalingv2.HPAScalingPolicy{
+				{
+					Type:          autoscalingv2.PercentScalingPolicy,
+					Value:         100,
+					PeriodSeconds: 15,
+				},
+			},
+		},
+		ScaleDown: &autoscalingv2.HPAScalingRules{
+			StabilizationWindowSeconds: ptr.To(int32(300)),
+			Policies: []autoscalingv2.HPAScalingPolicy{
+				{
+					Type:          autoscalingv2.PercentScalingPolicy,
+					Value:         100,
+					PeriodSeconds: 60,
+				},
+			},
+		},
+	}
+
 	hpa := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      f.Name,
 			Namespace: f.Namespace,
 		},
 		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			Behavior: ScaleUpBehavior,
 			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
 				APIVersion: "apps/v1",
 				Kind:       "Deployment",

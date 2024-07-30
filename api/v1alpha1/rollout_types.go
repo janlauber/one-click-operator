@@ -130,6 +130,7 @@ type RolloutSpec struct {
 	CronJobs           []CronJobSpec        `json:"cronjobs,omitempty"`
 	NodeSelector       map[string]string    `json:"nodeSelector,omitempty"`
 	Tolerations        []corev1.Toleration  `json:"tolerations,omitempty"`
+	HostAliases        []corev1.HostAlias   `json:"hostAliases,omitempty"`
 }
 
 type Resources struct {

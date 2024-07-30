@@ -118,6 +118,7 @@ func (r *RolloutReconciler) deploymentForRollout(ctx context.Context, f *oneclic
 					ImagePullSecrets:   imagePullSecrets,
 					NodeSelector:       f.Spec.NodeSelector,
 					Tolerations:        getTolerations(f.Spec.Tolerations),
+					HostAliases:        f.Spec.HostAliases,
 				},
 			},
 			Strategy: strategy,
@@ -322,6 +323,11 @@ func needsUpdate(current *appsv1.Deployment, f *oneclickiov1alpha1.Rollout) bool
 
 	// Check tolerations
 	if !reflect.DeepEqual(current.Spec.Template.Spec.Tolerations, getTolerations(f.Spec.Tolerations)) {
+		return true
+	}
+
+	// Check host aliases
+	if !reflect.DeepEqual(current.Spec.Template.Spec.HostAliases, f.Spec.HostAliases) {
 		return true
 	}
 

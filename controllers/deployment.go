@@ -226,14 +226,24 @@ func needsUpdate(current *appsv1.Deployment, f *oneclickiov1alpha1.Rollout) bool
 	}
 
 	// Check container security context
+	capabilities := make([]corev1.Capability, len(f.Spec.SecurityContext.Capabilities.Add))
+	for i, cap := range f.Spec.SecurityContext.Capabilities.Add {
+		capabilities[i] = corev1.Capability(cap)
+	}
+
+	dropCapabilities := make([]corev1.Capability, len(f.Spec.SecurityContext.Capabilities.Drop))
+	for i, cap := range f.Spec.SecurityContext.Capabilities.Drop {
+		dropCapabilities[i] = corev1.Capability(cap)
+	}
+
 	if !reflect.DeepEqual(current.Spec.Template.Spec.Containers[0].SecurityContext, &corev1.SecurityContext{
 		Privileged:               &f.Spec.SecurityContext.Privileged,
 		ReadOnlyRootFilesystem:   &f.Spec.SecurityContext.ReadOnlyRootFilesystem,
 		RunAsNonRoot:             &f.Spec.SecurityContext.RunAsNonRoot,
 		AllowPrivilegeEscalation: &f.Spec.SecurityContext.AllowPrivilegeEscalation,
 		Capabilities: &corev1.Capabilities{
-			Add:  []corev1.Capability{},
-			Drop: []corev1.Capability{},
+			Add:  capabilities,
+			Drop: dropCapabilities,
 		},
 	}) {
 		return true

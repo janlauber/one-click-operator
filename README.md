@@ -1,5 +1,25 @@
 # One-Click Operator
 
+> [!IMPORTANT]
+> ## 🌅 Archived — the successor is on its way
+>
+> This operator powered the original [One-Click](https://github.com/janlauber/one-click)
+> platform. We've since learned that the most eject-friendly, AI-ready way to
+> run a Container-as-a-Service platform needs **no operator and no CRDs** at
+> all — so we're building its successor from scratch.
+>
+> Meet **klickops**: a batteries-included CaaS platform for Kubernetes —
+> containers, secrets, networking, scaling, backups, managed databases and
+> more, from one clean UI, plus a CLI, an MCP server for AI agents, and a full
+> REST API.
+>
+> klickops is **not open source yet**, but it's coming. Bookmark it and watch
+> the repo:
+>
+> ### 👉 [github.com/natrontech/klickops](https://github.com/natrontech/klickops)
+>
+> This repository is archived and read-only. Thanks for using One-Click. 🙏
+
 [![CodeFactor](https://www.codefactor.io/repository/github/janlauber/one-click-operator/badge)](https://www.codefactor.io/repository/github/janlauber/one-click-operator)
 
 ## Description
